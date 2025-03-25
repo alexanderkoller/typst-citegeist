@@ -1,5 +1,6 @@
 #! /bin/bash
 
+PACKAGE=citegeist
 VERSION=$1
 
 if [ -z "$VERSION" ];
@@ -8,9 +9,9 @@ then
     exit 1
 fi
 
-GITHUB_PACKAGE=typst-packages-bibreader-$VERSION
-SRC_DIR=preview/bibreader/$VERSION
-TGT_DIR=$GITHUB_PACKAGE/packages/preview/bibreader/$VERSION
+GITHUB_PACKAGE=typst-packages-$PACKAGE-$VERSION
+SRC_DIR=preview/$PACKAGE/$VERSION
+TGT_DIR=$GITHUB_PACKAGE/packages/preview/$PACKAGE/$VERSION
 
 cd release
 
@@ -33,7 +34,7 @@ cp -r $SRC_DIR/* $TGT_DIR/
 
 # commit
 pushd $GITHUB_PACKAGE
-git add packages/preview/bibreader/$VERSION/*
-git commit -am "bibreader:$VERSION"
+git add packages/preview/$PACKAGE/$VERSION/*
+git commit -am "$PACKAGE:$VERSION"
 popd
 

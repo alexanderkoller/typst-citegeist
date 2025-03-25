@@ -9,7 +9,7 @@
 #
 # Usage: ./scripts/create-github.sh <VERSION>
 
-PACKAGE=bibreader
+PACKAGE=citegeist
 VERSION=$1
 
 if [ -z "$VERSION" ];

@@ -1,5 +1,6 @@
 #! /bin/bash
 
+PACKAGE=citegeist
 VERSION=$1
 
 if [ -z "$VERSION" ];
@@ -9,8 +10,8 @@ then
 fi
 
 
-RELEASE_DIR=release/preview/bibreader/$VERSION
-PLUGIN_DIR=plugin/bibreader/plugin
+RELEASE_DIR=release/preview/$PACKAGE/$VERSION
+PLUGIN_DIR=plugin/$PACKAGE/plugin
 
 # Check that WASM is up to date.
 
@@ -27,7 +28,7 @@ mkdir -p $RELEASE_DIR
 cp lib.typ $RELEASE_DIR/lib.typ
 cp README.md $RELEASE_DIR/
 cp LICENSE $RELEASE_DIR/
-cp $PLUGIN_DIR/target/wasm32-unknown-unknown/release/bibreader.wasm $RELEASE_DIR/
+cp $PLUGIN_DIR/target/wasm32-unknown-unknown/release/$PACKAGE.wasm $RELEASE_DIR/
 
 # replace version in typst.toml
 sed "s/VERSION/$VERSION/g" typst-template.toml > $RELEASE_DIR/typst.toml
