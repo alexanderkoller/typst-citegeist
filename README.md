@@ -15,13 +15,13 @@ Use the `load-bibliography` command to parse a bibtex string into a Typst dictio
 #let bibtex_string = read("custom.bib")
 #let bib = load-bibliography(bibtex_string)
 
-[#bib.bender-koller-2020-climbing]
+#bib.bender-koller-2020-climbing
 ```
 
 This will print the bibtex entry for the key `bender-koller-2020-climbing`:
 
 ```
-[(
+(
 	entry_type: "inproceedings",
 	entry_key: "bender-koller-2020-climbing",
 	fields: (
@@ -37,7 +37,7 @@ This will print the bibtex entry for the key `bender-koller-2020-climbing`:
 		url: "https://aclanthology.org/2020.acl-main.463",
 		year: "2020",
 	),
-)]
+)
 ```
 
 Note that you have to `read` the contents of the Bibtex file yourself, because Typst packages can only read files within the package.
