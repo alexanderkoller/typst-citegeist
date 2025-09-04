@@ -10,7 +10,7 @@ Citegeist is a thin wrapper around the [Typst biblatex crate](https://github.com
 Use the `load-bibliography` command to parse a bibtex string into a Typst dictionary:
 
 ```
-#import "@preview/citegeist:0.1.0": load-bibliography
+#import "@preview/citegeist:0.2.0": load-bibliography
 
 #let bibtex_string = read("custom.bib")
 #let bib = load-bibliography(bibtex_string)
@@ -25,7 +25,18 @@ This will print the bibtex entry for the key `bender-koller-2020-climbing`:
 	entry_type: "inproceedings",
 	entry_key: "bender-koller-2020-climbing",
 	fields: (
-		abstract: "The success of the large neural language models ...",
+		abstract: "The success of the large neural language models on many NLP tasks is
+		exciting. However, we find that these successes sometimes lead to hype in which these
+		models are being described as ``understanding'' language or capturing ``meaning''. In
+		this position paper, we argue that a system trained only on form has a priori no way
+		to learn meaning. In keeping with the ACL 2020 theme of ``Taking Stock of Where We've
+		Been and Where We're Going'', we argue that a clear understanding of the distinction
+		between form and meaning will help guide the field towards better science around
+		natural language understanding.",
+		address: "Online",
+		author: "Bender, Emily M. and Koller, Alexander",
+		booktitle: "Proceedings of the 58th Annual Meeting of the Association for
+		Computational Linguistics",
 		doi: "10.18653/v1/2020.acl-main.463",
 		editor: "Jurafsky, Dan and Chai, Joyce and Schluter, Natalie and Tetreault,
 		Joel",
@@ -37,6 +48,16 @@ This will print the bibtex entry for the key `bender-koller-2020-climbing`:
 		url: "https://aclanthology.org/2020.acl-main.463",
 		year: "2020",
 	),
+	parsed_names: (
+		author: (
+			(family: "Bender", given: "Emily M.", prefix: "", suffix: ""),
+			(family: "Koller", given: "Alexander", prefix: "", suffix: "")
+		),
+		editor: (
+			(family: "Jurafsky", given: "Dan", prefix: "", suffix: ""),
+			(family: "Chai", given: "Joyce", prefix: "", suffix:"")
+		)
+	)
 )
 ```
 
@@ -49,3 +70,6 @@ The function `load-bibliography` returns a dictionary with one element per bibli
 
 A Bibtex entry is represented as another dictionary, see the example above. It has three keys: `entry_type` is the Bibtex entry type (e.g. `inproceedings` or `article`); `entry_key` is the key of the Bibtex entry; and `fields` contains all the fields of the Bibtex entry.
 
+The `parsed_names` entry contains the values of all name-list fields, as parsed by the biblatex crate.
+The crate is pretty good at respecting the different ways in which names can be specified in the
+original Biblatex.
