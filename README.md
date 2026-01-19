@@ -10,7 +10,7 @@ Citegeist is a thin wrapper around the [Typst biblatex crate](https://github.com
 Use the `load-bibliography` command to parse a bibtex string into a Typst dictionary:
 
 ```
-#import "@preview/citegeist:0.2.0": load-bibliography
+#import "@preview/citegeist:0.2.1": load-bibliography
 
 #let bibtex_string = read("custom.bib")
 #let bib = load-bibliography(bibtex_string)
@@ -76,9 +76,11 @@ original Biblatex.
 
 ## Changelog
 
-## unreleased
+## 0.2.1
 
-Bump biblatex to [0.11.0](https://github.com/typst/biblatex/releases/tag/v0.11.0). This should eliminate most _wasm `unreachable` instruction executed_ errors caused by parsing non-ideal BibTeX files.
+- Bumped biblatex to [0.11.0](https://github.com/typst/biblatex/releases/tag/v0.11.0)
+for improved parsing of Bibtex files. Thanks to [Y.D.X.](https://github.com/YDX-2147483647) for the pull request!
+- Implemented much more careful error handling in the WASM plugin. This should eliminate the dreaded _wasm `unreachable` instruction executed_ error.
 
 ## 0.2.0
 
