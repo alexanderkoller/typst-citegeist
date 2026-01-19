@@ -1,6 +1,6 @@
 [package]
 name = "citegeist"
-version = "0.1.0"
+version = "0.2.1"
 edition = "2021"
 
 [lib]
@@ -8,7 +8,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 wasm-minimal-protocol = { path = "../" }
-biblatex = "0.10"
+biblatex = "0.11"
 serde = "1.0.204"
 serde_cbor = "0.10"
 serde_derive = "1.0.204"

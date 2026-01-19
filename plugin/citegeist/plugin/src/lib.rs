@@ -26,10 +26,14 @@ struct MyEntry {
     parsed_names: BTreeMap<String, Vec<BTreeMap<String,String>>>
 }
 
+
 #[wasm_func]
-pub fn get_bib_map(bib_contents_u8: &[u8]) -> Vec<u8> {
-    let bib_contents = str::from_utf8(bib_contents_u8).unwrap();
-    let bibliography = Bibliography::parse(bib_contents).unwrap();
+pub fn get_bib_map(bib_contents_u8: &[u8]) -> Result<Vec<u8>, String> {
+    let bib_contents = str::from_utf8(bib_contents_u8)
+        .map_err(|e| format!("invalid UTF-8 in bibliography: {e}"))?;
+    
+    let bibliography = Bibliography::parse(bib_contents)
+        .map_err(|e| format!("failed to parse bibliography: {e}"))?;
 
     let mut ret: BTreeMap<String, MyEntry> = BTreeMap::new();
     
@@ -37,7 +41,7 @@ pub fn get_bib_map(bib_contents_u8: &[u8]) -> Vec<u8> {
         ret.insert(entry.key.clone(), convert_entry(entry));
     }
 
-    return to_vec(&ret).unwrap();
+    to_vec(&ret).map_err(|e| format!("failed to serialize result: {e}"))
 }
 
 
