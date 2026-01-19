@@ -73,3 +73,17 @@ A Bibtex entry is represented as another dictionary, see the example above. It h
 The `parsed_names` entry contains the values of all name-list fields, as parsed by the biblatex crate.
 The crate is pretty good at respecting the different ways in which names can be specified in the
 original Biblatex.
+
+## Changelog
+
+## unreleased
+
+Bump biblatex to [0.11.0](https://github.com/typst/biblatex/releases/tag/v0.11.0). This should eliminate most _wasm `unreachable` instruction executed_ errors caused by parsing non-ideal BibTeX files.
+
+## 0.2.0
+
+Expose parsed names to Typst.
+
+## 0.1.0
+
+Initial release.
