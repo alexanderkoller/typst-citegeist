@@ -1,4 +1,6 @@
 
+// Tests that citegeist can handle inline comments (as per biblatex 0.11.0).
+
 #import "/tests/test-lib.typ": *
 
 #let basic-bib = "

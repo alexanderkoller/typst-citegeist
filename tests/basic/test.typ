@@ -29,3 +29,7 @@
 Hello World
 
 #let bib = load-bibliography(basic-bib)
+
+#assert("knuth1990" in bib)
+#assert(bib.knuth1990.entry_type == "book")
+#assert(bib.knuth1990.fields.title == "The TeX Book")
