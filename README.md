@@ -74,7 +74,23 @@ The `parsed_names` entry contains the values of all name-list fields, as parsed 
 The crate is pretty good at respecting the different ways in which names can be specified in the
 original Biblatex.
 
+
+## Efficiency note
+
+Using Citegeist from within Typst is _much_ slower than calling the biblatex crate from Rust. This is because (a) Citegeist converts biblatex data structures into dictionaries that can be processed by Typst (this adds a ~40% time overhead over the Bibtex parsing itself), and (b) Typst plugins are run as [interpreted WASM bytecode](https://typst.app/blog/2025/typst-0.13/#faster-plugins).
+
+On an example Bibtex file, interpreted WASM (wasmi) is roughly 15x slower than JIT-compiled WASM (wasmtime), which again is roughly 2x slower than native Rust binaries.
+Until Typst finds a way to support JIT-compiled WASM, this is a performance penalty we will have to live with.
+
+
+
 ## Changelog
+
+## 0.2.2
+
+- Performance improvements.
+- New parameter `keep-raw-names`: If `false` is passed, the returned dictionary will no longer contain the raw strings for name fields (author, editor, ...). They are still available as parsed data structures.
+
 
 ## 0.2.1
 
@@ -82,9 +98,11 @@ original Biblatex.
 for improved parsing of Bibtex files. Thanks to [Y.D.X.](https://github.com/YDX-2147483647) for the pull request!
 - Implemented much more careful error handling in the WASM plugin. This should eliminate the dreaded _wasm `unreachable` instruction executed_ error.
 
+
 ## 0.2.0
 
 Expose parsed names to Typst.
+
 
 ## 0.1.0
 
