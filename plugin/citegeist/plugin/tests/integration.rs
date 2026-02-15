@@ -9,15 +9,21 @@ struct MyEntry {
     parsed_names: HashMap<String, Vec<HashMap<String, String>>>,
 }
 
-/// Helper: call get_bib_map with keep_raw_names = true (default behaviour).
+/// Helper: call get_bib_map with defaults (keep_raw_names=true, sentence_case_titles=true).
 fn parse_bib(bib: &str) -> HashMap<String, MyEntry> {
-    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[1]).unwrap();
+    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1]).unwrap();
     serde_cbor::from_slice(&result_bytes).unwrap()
 }
 
-/// Helper: call get_bib_map with keep_raw_names = false.
+/// Helper: call with keep_raw_names=false, sentence_case_titles=true.
 fn parse_bib_no_raw_names(bib: &str) -> HashMap<String, MyEntry> {
-    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[0]).unwrap();
+    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[0], &[1]).unwrap();
+    serde_cbor::from_slice(&result_bytes).unwrap()
+}
+
+/// Helper: call with keep_raw_names=true, sentence_case_titles=false.
+fn parse_bib_verbatim_titles(bib: &str) -> HashMap<String, MyEntry> {
+    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[0]).unwrap();
     serde_cbor::from_slice(&result_bytes).unwrap()
 }
 
@@ -196,10 +202,8 @@ fn test_keep_raw_names_true() {
     let result = parse_bib(bib);
     let entry = result.get("test").unwrap();
 
-    // With keep_raw_names, raw strings are in fields
     assert!(entry.fields.contains_key("author"));
     assert!(entry.fields.contains_key("editor"));
-    // Parsed names are also present
     assert!(entry.parsed_names.contains_key("author"));
     assert!(entry.parsed_names.contains_key("editor"));
 }
@@ -218,32 +222,63 @@ fn test_keep_raw_names_false() {
     let result = parse_bib_no_raw_names(bib);
     let entry = result.get("test").unwrap();
 
-    // Without keep_raw_names, raw strings are NOT in fields
     assert!(!entry.fields.contains_key("author"));
     assert!(!entry.fields.contains_key("editor"));
-    // But parsed names are still present
     assert!(entry.parsed_names.contains_key("author"));
     assert!(entry.parsed_names.contains_key("editor"));
-    // Non-name fields are unaffected
     assert!(entry.fields.contains_key("year"));
     assert!(entry.fields.contains_key("title"));
 }
 
 #[test]
-fn test_default_options_keeps_raw_names() {
+fn test_default_options() {
     let bib = r#"
 @article{test,
-    title = "Test",
+    title = "Test Title",
     author = "Doe, John",
     year = "2024",
     journal = "Test Journal",
 }
 "#;
-    // Empty options = default = keep_raw_names true
-    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[]).unwrap();
+    // Empty options = defaults (keep_raw_names=true, sentence_case_titles=true)
+    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[], &[]).unwrap();
     let result: HashMap<String, MyEntry> = serde_cbor::from_slice(&result_bytes).unwrap();
     let entry = result.get("test").unwrap();
 
     assert!(entry.fields.contains_key("author"));
     assert!(entry.parsed_names.contains_key("author"));
+    // Default is sentence case
+    assert_eq!(entry.fields.get("title").unwrap(), "Test title");
+}
+
+#[test]
+fn test_sentence_case_titles_true() {
+    let bib = r#"
+@article{test,
+    title = "Test Title With {Proper} Nouns",
+    year = "2024",
+    journal = "Test Journal",
+}
+"#;
+    let result = parse_bib(bib);
+    let entry = result.get("test").unwrap();
+
+    // sentence case: first char uppercase, rest lowercase, braced text preserved
+    assert_eq!(entry.fields.get("title").unwrap(), "Test title with Proper nouns");
+}
+
+#[test]
+fn test_sentence_case_titles_false() {
+    let bib = r#"
+@article{test,
+    title = "Test Title With {Proper} Nouns",
+    year = "2024",
+    journal = "Test Journal",
+}
+"#;
+    let result = parse_bib_verbatim_titles(bib);
+    let entry = result.get("test").unwrap();
+
+    // verbatim: preserved as-is (braces stripped but case unchanged)
+    assert_eq!(entry.fields.get("title").unwrap(), "Test Title With Proper Nouns");
 }

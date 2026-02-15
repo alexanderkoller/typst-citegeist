@@ -1,8 +1,6 @@
 
 #import "/tests/test-lib.typ": *
 
-// #import "@local/citegeist:0.2.1": *
-
 #let basic-bib = "
 @book{knuth1990,
   author = {Knuth, Donald E.},
@@ -28,8 +26,16 @@
 
 Hello World
 
-#let bib = load-bibliography(basic-bib)
+#let bib = load-bibliography(basic-bib, sentence-case-titles: false)
 
 #assert("knuth1990" in bib)
-#assert(bib.knuth1990.entry_type == "book")
-#assert(bib.knuth1990.fields.title == "The TeX Book")
+#assert.eq(bib.knuth1990.entry_type, "book")
+#assert.eq(bib.knuth1990.fields.title, "The TeX Book")
+
+
+
+#let bib = load-bibliography(basic-bib, sentence-case-titles: true)
+
+#assert("knuth1990" in bib)
+#assert.eq(bib.knuth1990.entry_type, "book")
+#assert.eq(bib.knuth1990.fields.title, "The TeX book")

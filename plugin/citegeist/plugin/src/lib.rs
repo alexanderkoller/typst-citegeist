@@ -26,14 +26,23 @@ struct MyEntry {
 
 /// Main entry point for the plugin.
 ///
-/// `options_u8` controls behaviour. Currently only the first byte is used:
-///   - byte 0: `keep_raw_names` (1 = true, 0 = false; default = 1 if empty)
-///
-/// When `keep_raw_names` is false, name fields (author, editor, …) are only
-/// returned as structured data in `parsed_names` and omitted from `fields`.
+/// Parameters:
+///   - `bib_contents_u8`: UTF-8 encoded bibliography content
+///   - `keep_raw_names_u8`: single byte; 1 = keep raw name strings in `fields`,
+///      0 = omit them (default: 1 if empty)
+///   - `sentence_case_titles_u8`: single byte; 1 = format titles in sentence case,
+///      0 = keep titles verbatim (default: 1 if empty)
 #[cfg_attr(target_arch = "wasm32", wasm_func)]
-pub fn get_bib_map(bib_contents_u8: &[u8], options_u8: &[u8]) -> Result<Vec<u8>, String> {
-    let keep_raw_names = match options_u8.first() {
+pub fn get_bib_map(
+    bib_contents_u8: &[u8],
+    keep_raw_names_u8: &[u8],
+    sentence_case_titles_u8: &[u8],
+) -> Result<Vec<u8>, String> {
+    let keep_raw_names = match keep_raw_names_u8.first() {
+        Some(&b) => b != 0,
+        None => true,
+    };
+    let sentence_case_titles = match sentence_case_titles_u8.first() {
         Some(&b) => b != 0,
         None => true,
     };
@@ -47,13 +56,16 @@ pub fn get_bib_map(bib_contents_u8: &[u8], options_u8: &[u8]) -> Result<Vec<u8>,
     let mut ret: HashMap<String, MyEntry> = HashMap::with_capacity(bibliography.len());
 
     for entry in bibliography.iter() {
-        ret.insert(entry.key.clone(), convert_entry(entry, keep_raw_names));
+        ret.insert(
+            entry.key.clone(),
+            convert_entry(entry, keep_raw_names, sentence_case_titles),
+        );
     }
 
     to_vec(&ret).map_err(|e| format!("failed to serialize result: {e}"))
 }
 
-fn convert_entry(entry: &Entry, keep_raw_names: bool) -> MyEntry {
+fn convert_entry(entry: &Entry, keep_raw_names: bool, sentence_case_titles: bool) -> MyEntry {
     let mut ret = MyEntry {
         entry_type: entry.entry_type.to_string(),
         entry_key: entry.key.clone(),
@@ -63,7 +75,6 @@ fn convert_entry(entry: &Entry, keep_raw_names: bool) -> MyEntry {
 
     for (key, chunks) in &entry.fields {
         if NAME_FIELDS.contains(&key.as_str()) {
-            // Parse names into structured data.
             if let Ok(names) = <Vec<Person> as Type>::from_chunks(chunks) {
                 let parsed: Vec<HashMap<String, String>> = names
                     .into_iter()
@@ -78,12 +89,15 @@ fn convert_entry(entry: &Entry, keep_raw_names: bool) -> MyEntry {
                     .collect();
                 ret.parsed_names.insert(key.clone(), parsed);
             }
-            // Only store the verbatim string if requested.
             if keep_raw_names {
                 ret.fields.insert(key.clone(), chunks.format_verbatim());
             }
         } else if key == "title" {
-            ret.fields.insert(key.clone(), chunks.format_sentence());
+            if sentence_case_titles {
+                ret.fields.insert(key.clone(), chunks.format_sentence());
+            } else {
+                ret.fields.insert(key.clone(), chunks.format_verbatim());
+            }
         } else {
             ret.fields.insert(key.clone(), chunks.format_verbatim());
         }
@@ -93,7 +107,11 @@ fn convert_entry(entry: &Entry, keep_raw_names: bool) -> MyEntry {
     // (entry.title() resolves aliases like maintitle).
     if !ret.fields.contains_key("title") {
         if let Ok(title) = entry.title() {
-            ret.fields.insert("title".into(), title.format_sentence());
+            if sentence_case_titles {
+                ret.fields.insert("title".into(), title.format_sentence());
+            } else {
+                ret.fields.insert("title".into(), title.format_verbatim());
+            }
         }
     }
 

@@ -10,7 +10,7 @@ Citegeist is a thin wrapper around the [Typst biblatex crate](https://github.com
 Use the `load-bibliography` command to parse a bibtex string into a Typst dictionary:
 
 ```
-#import "@preview/citegeist:0.2.1": load-bibliography
+#import "@preview/citegeist:0.2.2": load-bibliography
 
 #let bibtex_string = read("custom.bib")
 #let bib = load-bibliography(bibtex_string)
@@ -79,9 +79,17 @@ original Biblatex.
 
 Using Citegeist from within Typst is _much_ slower than calling the biblatex crate from Rust. This is because (a) Citegeist converts biblatex data structures into dictionaries that can be processed by Typst (this adds a ~40% time overhead over the Bibtex parsing itself), and (b) Typst plugins are run as [interpreted WASM bytecode](https://typst.app/blog/2025/typst-0.13/#faster-plugins).
 
-On an example Bibtex file, interpreted WASM (wasmi) is roughly 15x slower than JIT-compiled WASM (wasmtime), which again is roughly 2x slower than native Rust binaries.
+In my experiments with Citegeist, interpreted WASM (wasmi) is roughly 15x slower than JIT-compiled WASM (wasmtime), which again is roughly 2x slower than native Rust binaries.
 Until Typst finds a way to support JIT-compiled WASM, this is a performance penalty we will have to live with.
 
+
+## Compilation
+
+To run the tests:
+
+```
+cargo test --manifest-path plugin/citegeist/plugin/Cargo.toml
+```
 
 
 ## Changelog
@@ -90,6 +98,7 @@ Until Typst finds a way to support JIT-compiled WASM, this is a performance pena
 
 - Performance improvements.
 - New parameter `keep-raw-names`: If `false` is passed, the returned dictionary will no longer contain the raw strings for name fields (author, editor, ...). They are still available as parsed data structures.
+- New parameter `sentence-case-titles`: If `true` is passed, titles are rewritten to [sentence case](https://apastyle.apa.org/style-grammar-guidelines/capitalization/sentence-case); otherwise the capitalization is retained as in the Bibtex file.
 
 
 ## 0.2.1
