@@ -1,19 +1,31 @@
-#[cfg(target_arch = "wasm32")]
-use wasm_minimal_protocol::*;
 use biblatex::*;
 use core::str;
 use std::collections::HashMap;
+#[cfg(target_arch = "wasm32")]
+use wasm_minimal_protocol::*;
 
 #[cfg(target_arch = "wasm32")]
 initiate_protocol!();
 
-use serde_derive::{Deserialize, Serialize};
 use serde_cbor::to_vec;
+use serde_derive::{Deserialize, Serialize};
 
 const NAME_FIELDS: &[&str] = &[
-    "afterword", "annotator", "author", "bookauthor", "commentator",
-    "editor", "editora", "editorb", "editorc", "foreword", "holder",
-    "introduction", "shortauthor", "shorteditor", "translator",
+    "afterword",
+    "annotator",
+    "author",
+    "bookauthor",
+    "commentator",
+    "editor",
+    "editora",
+    "editorb",
+    "editorc",
+    "foreword",
+    "holder",
+    "introduction",
+    "shortauthor",
+    "shorteditor",
+    "translator",
 ];
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -22,6 +34,13 @@ struct MyEntry {
     entry_key: String,
     fields: HashMap<String, String>,
     parsed_names: HashMap<String, Vec<HashMap<String, String>>>,
+    name_metadata: HashMap<String, Vec<NameMetadata>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct NameMetadata {
+    verbatim: bool,
+    literal: bool,
 }
 
 /// Main entry point for the plugin.
@@ -71,11 +90,13 @@ fn convert_entry(entry: &Entry, keep_raw_names: bool, sentence_case_titles: bool
         entry_key: entry.key.clone(),
         fields: HashMap::with_capacity(entry.fields.len()),
         parsed_names: HashMap::new(),
+        name_metadata: HashMap::new(),
     };
 
     for (key, chunks) in &entry.fields {
         if NAME_FIELDS.contains(&key.as_str()) {
             if let Ok(names) = <Vec<Person> as Type>::from_chunks(chunks) {
+                let name_chunks = split_name_chunks(chunks);
                 let parsed: Vec<HashMap<String, String>> = names
                     .into_iter()
                     .map(|p| {
@@ -87,7 +108,17 @@ fn convert_entry(entry: &Entry, keep_raw_names: bool, sentence_case_titles: bool
                         ])
                     })
                     .collect();
+                let metadata = (0..parsed.len())
+                    .map(|index| {
+                        let chunks = name_chunks.get(index).map(Vec::as_slice).unwrap_or(&[]);
+                        NameMetadata {
+                            verbatim: name_is_verbatim(chunks),
+                            literal: name_is_literal(chunks),
+                        }
+                    })
+                    .collect();
                 ret.parsed_names.insert(key.clone(), parsed);
+                ret.name_metadata.insert(key.clone(), metadata);
             }
             if keep_raw_names {
                 ret.fields.insert(key.clone(), chunks.format_verbatim());
@@ -116,4 +147,72 @@ fn convert_entry(entry: &Entry, keep_raw_names: bool, sentence_case_titles: bool
     }
 
     ret
+}
+
+fn split_name_chunks(chunks: ChunksRef<'_>) -> Vec<Chunks> {
+    let mut out = Vec::new();
+    let mut current = Vec::new();
+
+    for chunk in chunks {
+        match &chunk.v {
+            Chunk::Normal(s) => {
+                let mut rest = s.as_str();
+                while let Some(pos) = find_name_separator(rest) {
+                    push_normal_chunk(&mut current, rest[..pos].trim_end());
+                    out.push(std::mem::take(&mut current));
+                    rest = rest[pos + "and".len()..].trim_start();
+                }
+                push_normal_chunk(&mut current, rest);
+            }
+            _ => current.push(chunk.clone()),
+        }
+    }
+
+    out.push(current);
+    out
+}
+
+fn find_name_separator(s: &str) -> Option<usize> {
+    s.match_indices("and").find_map(|(pos, _)| {
+        let before = s[..pos].chars().next_back();
+        let after = s[pos + "and".len()..].chars().next();
+        if before.is_some_and(char::is_whitespace) && after.is_some_and(char::is_whitespace) {
+            Some(pos)
+        } else {
+            None
+        }
+    })
+}
+
+fn push_normal_chunk(chunks: &mut Chunks, s: &str) {
+    if !s.is_empty() {
+        chunks.push(Spanned::detached(Chunk::Normal(s.to_string())));
+    }
+}
+
+fn name_is_verbatim(chunks: ChunksRef<'_>) -> bool {
+    chunks
+        .iter()
+        .any(|chunk| matches!(chunk.v, Chunk::Verbatim(_)))
+}
+
+fn name_is_literal(chunks: ChunksRef<'_>) -> bool {
+    let mut saw_content = false;
+
+    for chunk in chunks {
+        match &chunk.v {
+            Chunk::Verbatim(s) => {
+                if s.chars().any(|c| !c.is_whitespace()) {
+                    saw_content = true;
+                }
+            }
+            Chunk::Normal(s) | Chunk::Math(s) => {
+                if s.chars().any(|c| !c.is_whitespace()) {
+                    return false;
+                }
+            }
+        }
+    }
+
+    saw_content
 }

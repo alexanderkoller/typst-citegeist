@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use serde_derive::Deserialize;
+use std::collections::HashMap;
 
 #[derive(Debug, Deserialize)]
 struct MyEntry {
@@ -7,6 +7,13 @@ struct MyEntry {
     entry_key: String,
     fields: HashMap<String, String>,
     parsed_names: HashMap<String, Vec<HashMap<String, String>>>,
+    name_metadata: HashMap<String, Vec<NameMetadata>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct NameMetadata {
+    verbatim: bool,
+    literal: bool,
 }
 
 /// Helper: call get_bib_map with defaults (keep_raw_names=true, sentence_case_titles=true).
@@ -51,6 +58,8 @@ fn test_parse_simple_bib() {
     assert_eq!(authors.len(), 1);
     assert_eq!(authors[0].get("family").unwrap(), "Doe");
     assert_eq!(authors[0].get("given").unwrap(), "John");
+    assert_eq!(authors[0].get("prefix").unwrap(), "");
+    assert_eq!(authors[0].get("suffix").unwrap(), "");
 
     // With keep_raw_names, the raw author string is also in fields
     assert!(entry.fields.contains_key("author"));
@@ -185,7 +194,11 @@ fn test_real_world_entry() {
     let editors = entry.parsed_names.get("editor").unwrap();
     assert_eq!(editors.len(), 2);
 
-    assert!(entry.fields.get("url").unwrap().contains("aclanthology.org"));
+    assert!(entry
+        .fields
+        .get("url")
+        .unwrap()
+        .contains("aclanthology.org"));
 }
 
 #[test]
@@ -264,7 +277,10 @@ fn test_sentence_case_titles_true() {
     let entry = result.get("test").unwrap();
 
     // sentence case: first char uppercase, rest lowercase, braced text preserved
-    assert_eq!(entry.fields.get("title").unwrap(), "Test title with Proper nouns");
+    assert_eq!(
+        entry.fields.get("title").unwrap(),
+        "Test title with Proper nouns"
+    );
 }
 
 #[test]
@@ -280,5 +296,44 @@ fn test_sentence_case_titles_false() {
     let entry = result.get("test").unwrap();
 
     // verbatim: preserved as-is (braces stripped but case unchanged)
-    assert_eq!(entry.fields.get("title").unwrap(), "Test Title With Proper Nouns");
+    assert_eq!(
+        entry.fields.get("title").unwrap(),
+        "Test Title With Proper Nouns"
+    );
+}
+
+#[test]
+fn test_parsed_names_mark_literal_and_verbatim_authors() {
+    let bib = r#"
+@online{protected-author,
+    title = "Protected Author",
+    author = {{Typst Team} and Doe, John and John {NASA} Smith},
+    year = "2024",
+}
+"#;
+    let result = parse_bib(bib);
+    let entry = result.get("protected-author").unwrap();
+    let authors = entry.parsed_names.get("author").unwrap();
+    let metadata = entry.name_metadata.get("author").unwrap();
+
+    assert_eq!(authors.len(), 3);
+    assert_eq!(metadata.len(), 3);
+
+    assert_eq!(authors[0].get("family").unwrap(), "Typst Team");
+    assert_eq!(authors[0].get("given").unwrap(), "");
+    assert_eq!(authors[0].len(), 4);
+    assert!(metadata[0].verbatim);
+    assert!(metadata[0].literal);
+
+    assert_eq!(authors[1].get("family").unwrap(), "Doe");
+    assert_eq!(authors[1].get("given").unwrap(), "John");
+    assert_eq!(authors[1].len(), 4);
+    assert!(!metadata[1].verbatim);
+    assert!(!metadata[1].literal);
+
+    assert_eq!(authors[2].get("family").unwrap(), "Smith");
+    assert_eq!(authors[2].get("given").unwrap(), "John NASA");
+    assert_eq!(authors[2].len(), 4);
+    assert!(metadata[2].verbatim);
+    assert!(!metadata[2].literal);
 }

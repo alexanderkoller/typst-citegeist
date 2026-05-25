@@ -57,6 +57,16 @@ This will print the bibtex entry for the key `bender-koller-2020-climbing`:
 			(family: "Jurafsky", given: "Dan", prefix: "", suffix: ""),
 			(family: "Chai", given: "Joyce", prefix: "", suffix:"")
 		)
+	),
+	name_metadata: (
+		author: (
+			(verbatim: false, literal: false),
+			(verbatim: false, literal: false)
+		),
+		editor: (
+			(verbatim: false, literal: false),
+			(verbatim: false, literal: false)
+		)
 	)
 )
 ```
@@ -71,6 +81,22 @@ The function `load-bibliography` returns a dictionary with one element per bibli
 A Bibtex entry is represented as another dictionary, see the example above. It has three keys: `entry_type` is the Bibtex entry type (e.g. `inproceedings` or `article`); `entry_key` is the key of the Bibtex entry; and `fields` contains all the fields of the Bibtex entry.
 
 The `parsed_names` entry contains the values of all name-list fields, as parsed by the biblatex crate.
+Each parsed name contains `family`, `given`, `prefix`, and `suffix`.
+
+The optional `name_metadata` entry contains one metadata item per parsed name. Its keys match
+`parsed_names`, and its arrays use the same order as the corresponding parsed-name arrays. For
+example, `name_metadata.author.at(0)` describes `parsed_names.author.at(0)`.
+
+Name metadata retains brace-protection information from the parsed BibTeX chunks:
+
+- `verbatim`: at least one part of the name was protected with braces, such as `John {NASA} Smith`
+- `literal`: all non-whitespace parts of the name were protected, such as `{{Typst Team}}`
+
+These booleans are computed from the chunk structure that the `biblatex` crate produces. In
+particular, extra BibTeX braces become `Chunk::Verbatim`; Citegeist checks the chunks for each
+name item after biblatex has parsed and split the name list. It does not infer literal names from
+the formatted text, spacing, or the presence or absence of `family`/`given` parts.
+
 The crate is pretty good at respecting the different ways in which names can be specified in the
 original Biblatex.
 
@@ -93,6 +119,12 @@ cargo test --manifest-path plugin/citegeist/plugin/Cargo.toml
 
 
 ## Changelog
+
+## Unreleased
+
+- Entries now include parallel `name_metadata` with `verbatim` and `literal` booleans so downstream
+  code can distinguish fully protected/literal names like `{{Typst Team}}` from ordinary personal
+  names while `parsed_names` keeps its existing string-only structure.
 
 ## 0.2.2
 
