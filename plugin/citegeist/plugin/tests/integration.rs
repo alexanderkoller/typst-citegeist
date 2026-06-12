@@ -11,19 +11,19 @@ struct MyEntry {
 
 /// Helper: call get_bib_map with defaults (keep_raw_names=true, sentence_case_titles=true).
 fn parse_bib(bib: &str) -> HashMap<String, MyEntry> {
-    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1]).unwrap();
+    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[]).unwrap();
     serde_cbor::from_slice(&result_bytes).unwrap()
 }
 
 /// Helper: call with keep_raw_names=false, sentence_case_titles=true.
 fn parse_bib_no_raw_names(bib: &str) -> HashMap<String, MyEntry> {
-    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[0], &[1]).unwrap();
+    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[0], &[1], &[]).unwrap();
     serde_cbor::from_slice(&result_bytes).unwrap()
 }
 
 /// Helper: call with keep_raw_names=true, sentence_case_titles=false.
 fn parse_bib_verbatim_titles(bib: &str) -> HashMap<String, MyEntry> {
-    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[0]).unwrap();
+    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[0], &[]).unwrap();
     serde_cbor::from_slice(&result_bytes).unwrap()
 }
 
@@ -241,7 +241,7 @@ fn test_default_options() {
 }
 "#;
     // Empty options = defaults (keep_raw_names=true, sentence_case_titles=true)
-    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[], &[]).unwrap();
+    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[], &[], &[]).unwrap();
     let result: HashMap<String, MyEntry> = serde_cbor::from_slice(&result_bytes).unwrap();
     let entry = result.get("test").unwrap();
 
@@ -281,4 +281,58 @@ fn test_sentence_case_titles_false() {
 
     // verbatim: preserved as-is (braces stripped but case unchanged)
     assert_eq!(entry.fields.get("title").unwrap(), "Test Title With Proper Nouns");
+}
+
+// ---- order preservation (entries returned in source order) ----
+
+/// Helper: deserialize into an order-preserving map to assert entry order.
+fn parse_bib_ordered(bib: &str) -> indexmap::IndexMap<String, MyEntry> {
+    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[]).unwrap();
+    serde_cbor::from_slice(&result_bytes).unwrap()
+}
+
+#[test]
+fn test_entry_order_preserved() {
+    // Mixed entry types and non-alphabetical keys: a HashMap would reorder these.
+    let bib = r#"
+@article{zebra, title = {Z}, author = {A}, year = {2020}}
+@book{alpha,    title = {A}, author = {B}, year = {2021}}
+@inproceedings{mango, title = {M}, author = {C}, year = {2022}}
+@book{beta,     title = {Be}, author = {D}, year = {2023}}
+@misc{xray,     title = {X}, author = {E}, year = {2024}}
+"#;
+    let result = parse_bib_ordered(bib);
+    let order: Vec<&str> = result.keys().map(|s| s.as_str()).collect();
+    assert_eq!(order, vec!["zebra", "alpha", "mango", "beta", "xray"]);
+}
+
+// ---- duplicate-key handling ----
+
+#[test]
+fn test_duplicate_key_errors_by_default() {
+    let bib = "@book{k, title={First}, author={A}, year={2020}}\n\
+               @book{k, title={Second}, author={B}, year={2021}}";
+    // on_duplicate = 0 (empty) -> hard error, unchanged behaviour.
+    assert!(citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[]).is_err());
+    assert!(citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[0]).is_err());
+}
+
+#[test]
+fn test_duplicate_key_keep_first() {
+    let bib = "@book{k, title={First}, author={A}, year={2020}}\n\
+               @book{k, title={Second}, author={B}, year={2021}}";
+    let bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[1]).unwrap();
+    let result: HashMap<String, MyEntry> = serde_cbor::from_slice(&bytes).unwrap();
+    assert_eq!(result.len(), 1);
+    assert_eq!(result["k"].fields["title"], "First");
+}
+
+#[test]
+fn test_duplicate_key_keep_last() {
+    let bib = "@book{k, title={First}, author={A}, year={2020}}\n\
+               @book{k, title={Second}, author={B}, year={2021}}";
+    let bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[2]).unwrap();
+    let result: HashMap<String, MyEntry> = serde_cbor::from_slice(&bytes).unwrap();
+    assert_eq!(result.len(), 1);
+    assert_eq!(result["k"].fields["title"], "Second");
 }

@@ -64,6 +64,16 @@ This will print the bibtex entry for the key `bender-koller-2020-climbing`:
 Note that you have to `read` the contents of the Bibtex file yourself, because Typst packages can only read files within the package.
 
 
+## Duplicate keys
+
+By default, a duplicate citation key aborts the whole parse with an error (unchanged behaviour). You can opt into tolerating duplicates:
+
+```
+load-bibliography(bib, on-duplicate: "keep-first")  // drop later duplicates
+load-bibliography(bib, on-duplicate: "keep-last")   // drop earlier duplicates
+load-bibliography(bib, on-duplicate: "error")       // default
+```
+
 ## Details
 
 The function `load-bibliography` returns a dictionary with one element per bibliography entry in your Bibtex file. The key of the dictionary element is the Bibtex key (in the example, `bender-koller-2020-climbing`); the value is a data structure representing a Bibtex entry.
@@ -71,6 +81,8 @@ The function `load-bibliography` returns a dictionary with one element per bibli
 A Bibtex entry is represented as another dictionary, see the example above. It has three keys: `entry_type` is the Bibtex entry type (e.g. `inproceedings` or `article`); `entry_key` is the key of the Bibtex entry; and `fields` contains all the fields of the Bibtex entry.
 
 The `parsed_names` entry contains the values of all name-list fields, as parsed by the biblatex crate.
+
+Entries are returned **in the order they appear in the `.bib` file**.
 The crate is pretty good at respecting the different ways in which names can be specified in the
 original Biblatex.
 
@@ -93,6 +105,12 @@ cargo test --manifest-path plugin/citegeist/plugin/Cargo.toml
 
 
 ## Changelog
+
+## Unreleased
+
+- Entries are now returned in the order they appear in the `.bib` file (previously the order was unspecified, because entries were stored in a `HashMap`).
+- New `on-duplicate` parameter: `"error"` (default, unchanged), `"keep-first"`, or `"keep-last"`, controlling how a duplicate citation key is handled instead of always aborting the parse.
+
 
 ## 0.2.2
 
