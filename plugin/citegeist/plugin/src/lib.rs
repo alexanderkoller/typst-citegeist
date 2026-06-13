@@ -32,11 +32,16 @@ struct MyEntry {
 ///      0 = omit them (default: 1 if empty)
 ///   - `sentence_case_titles_u8`: single byte; 1 = format titles in sentence case,
 ///      0 = keep titles verbatim (default: 1 if empty)
+///   - `verbatim_u8`: single byte; 1 = return every field value byte-for-byte
+///      as written in the source (no LaTeX/escape interpretation, no brace
+///      stripping, no sentence casing), 0 = interpret as before
+///      (default: 0 if empty).
 #[cfg_attr(target_arch = "wasm32", wasm_func)]
 pub fn get_bib_map(
     bib_contents_u8: &[u8],
     keep_raw_names_u8: &[u8],
     sentence_case_titles_u8: &[u8],
+    verbatim_u8: &[u8],
 ) -> Result<Vec<u8>, String> {
     let keep_raw_names = match keep_raw_names_u8.first() {
         Some(&b) => b != 0,
@@ -46,6 +51,7 @@ pub fn get_bib_map(
         Some(&b) => b != 0,
         None => true,
     };
+    let verbatim = matches!(verbatim_u8.first(), Some(&b) if b != 0);
 
     let bib_contents = str::from_utf8(bib_contents_u8)
         .map_err(|e| format!("invalid UTF-8 in bibliography: {e}"))?;
@@ -58,14 +64,32 @@ pub fn get_bib_map(
     for entry in bibliography.iter() {
         ret.insert(
             entry.key.clone(),
-            convert_entry(entry, keep_raw_names, sentence_case_titles),
+            convert_entry(entry, keep_raw_names, sentence_case_titles, verbatim, bib_contents),
         );
     }
 
     to_vec(&ret).map_err(|e| format!("failed to serialize result: {e}"))
 }
 
-fn convert_entry(entry: &Entry, keep_raw_names: bool, sentence_case_titles: bool) -> MyEntry {
+/// Byte-for-byte source slice covering a field's chunks (verbatim mode):
+/// from the start of the first chunk's span to the end of the last chunk's span.
+/// Returns the raw `.bib` text, with no escape interpretation or brace stripping.
+fn raw_source(chunks: &Chunks, src: &str) -> String {
+    match (chunks.first(), chunks.last()) {
+        (Some(first), Some(last)) => {
+            src.get(first.span.start..last.span.end).unwrap_or("").to_string()
+        }
+        _ => String::new(),
+    }
+}
+
+fn convert_entry(
+    entry: &Entry,
+    keep_raw_names: bool,
+    sentence_case_titles: bool,
+    verbatim: bool,
+    src: &str,
+) -> MyEntry {
     let mut ret = MyEntry {
         entry_type: entry.entry_type.to_string(),
         entry_key: entry.key.clone(),
@@ -90,16 +114,21 @@ fn convert_entry(entry: &Entry, keep_raw_names: bool, sentence_case_titles: bool
                 ret.parsed_names.insert(key.clone(), parsed);
             }
             if keep_raw_names {
-                ret.fields.insert(key.clone(), chunks.format_verbatim());
+                let v = if verbatim { raw_source(chunks, src) } else { chunks.format_verbatim() };
+                ret.fields.insert(key.clone(), v);
             }
         } else if key == "title" {
-            if sentence_case_titles {
-                ret.fields.insert(key.clone(), chunks.format_sentence());
+            let v = if verbatim {
+                raw_source(chunks, src)
+            } else if sentence_case_titles {
+                chunks.format_sentence()
             } else {
-                ret.fields.insert(key.clone(), chunks.format_verbatim());
-            }
+                chunks.format_verbatim()
+            };
+            ret.fields.insert(key.clone(), v);
         } else {
-            ret.fields.insert(key.clone(), chunks.format_verbatim());
+            let v = if verbatim { raw_source(chunks, src) } else { chunks.format_verbatim() };
+            ret.fields.insert(key.clone(), v);
         }
     }
 

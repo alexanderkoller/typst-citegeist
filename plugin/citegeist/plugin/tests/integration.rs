@@ -11,19 +11,19 @@ struct MyEntry {
 
 /// Helper: call get_bib_map with defaults (keep_raw_names=true, sentence_case_titles=true).
 fn parse_bib(bib: &str) -> HashMap<String, MyEntry> {
-    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1]).unwrap();
+    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[]).unwrap();
     serde_cbor::from_slice(&result_bytes).unwrap()
 }
 
 /// Helper: call with keep_raw_names=false, sentence_case_titles=true.
 fn parse_bib_no_raw_names(bib: &str) -> HashMap<String, MyEntry> {
-    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[0], &[1]).unwrap();
+    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[0], &[1], &[]).unwrap();
     serde_cbor::from_slice(&result_bytes).unwrap()
 }
 
 /// Helper: call with keep_raw_names=true, sentence_case_titles=false.
 fn parse_bib_verbatim_titles(bib: &str) -> HashMap<String, MyEntry> {
-    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[0]).unwrap();
+    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[0], &[]).unwrap();
     serde_cbor::from_slice(&result_bytes).unwrap()
 }
 
@@ -241,7 +241,7 @@ fn test_default_options() {
 }
 "#;
     // Empty options = defaults (keep_raw_names=true, sentence_case_titles=true)
-    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[], &[]).unwrap();
+    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[], &[], &[]).unwrap();
     let result: HashMap<String, MyEntry> = serde_cbor::from_slice(&result_bytes).unwrap();
     let entry = result.get("test").unwrap();
 
@@ -281,4 +281,24 @@ fn test_sentence_case_titles_false() {
 
     // verbatim: preserved as-is (braces stripped but case unchanged)
     assert_eq!(entry.fields.get("title").unwrap(), "Test Title With Proper Nouns");
+}
+
+// ---- verbatim field mode ----
+
+#[test]
+fn test_verbatim_field_mode() {
+    // \textbackslash / \$ / braces / \\ must come back byte-for-byte under verbatim.
+    let bib = r#"@book{k, title = {C\textbackslash D and 5\$ x and {NASA} and A\\B}, author = {Smith, J}, year = {2020}}"#;
+    let bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[1]).unwrap();
+    let result: HashMap<String, MyEntry> = serde_cbor::from_slice(&bytes).unwrap();
+    let title = &result["k"].fields["title"];
+    assert_eq!(title, r#"C\textbackslash D and 5\$ x and {NASA} and A\\B"#);
+}
+
+#[test]
+fn test_verbatim_off_interprets_as_before() {
+    let bib = r#"@book{k, title = {a\textbackslash b}, author = {Smith, J}, year = {2020}}"#;
+    let bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[0]).unwrap();
+    let result: HashMap<String, MyEntry> = serde_cbor::from_slice(&bytes).unwrap();
+    assert_ne!(result["k"].fields["title"], r#"a\textbackslash b"#);
 }
