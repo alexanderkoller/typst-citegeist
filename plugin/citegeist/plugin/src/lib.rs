@@ -87,7 +87,8 @@ pub fn get_bib_map(
             .map_err(|e| format!("failed to parse bibliography: {e}"))?
     };
 
-    // IndexMap 保留 `bibliography.iter()` 的源文件顺序（biblatex 内部 entries: Vec<Entry>）。
+    // IndexMap preserves source order from `bibliography.iter()` 
+    // to match biblatex's internal Vec<Entry>.
     let mut ret: IndexMap<String, MyEntry> = IndexMap::with_capacity(bibliography.len());
 
     for entry in bibliography.iter() {
