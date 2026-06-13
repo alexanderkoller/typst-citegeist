@@ -64,6 +64,16 @@ This will print the bibtex entry for the key `bender-koller-2020-climbing`:
 Note that you have to `read` the contents of the Bibtex file yourself, because Typst packages can only read files within the package.
 
 
+## Verbatim field values
+
+By default, field values are returned with the biblatex crate's interpretation applied (escapes resolved, braces stripped, titles optionally sentence-cased). If you do your own LaTeX handling and need the untouched source, pass `verbatim: true`:
+
+```
+load-bibliography(bib, verbatim: true)
+```
+
+Every field value is then the exact substring of the `.bib` source (e.g. `\textbackslash`, `\$`, `{NASA}` and `\\` are preserved as written), with no interpretation.
+
 ## Details
 
 The function `load-bibliography` returns a dictionary with one element per bibliography entry in your Bibtex file. The key of the dictionary element is the Bibtex key (in the example, `bender-koller-2020-climbing`); the value is a data structure representing a Bibtex entry.
@@ -93,6 +103,11 @@ cargo test --manifest-path plugin/citegeist/plugin/Cargo.toml
 
 
 ## Changelog
+
+## Unreleased
+
+- New `verbatim` parameter: when `true`, every field value is returned byte-for-byte as written in the source (no LaTeX/escape interpretation, no brace stripping, no sentence casing), for consumers that do their own LaTeX handling.
+
 
 ## 0.2.2
 
