@@ -66,7 +66,8 @@ Note that you have to `read` the contents of the Bibtex file yourself, because T
 
 ## Duplicate keys
 
-By default, a duplicate citation key aborts the whole parse with an error (unchanged behaviour). You can opt into tolerating duplicates:
+By default, a duplicate citation key aborts the whole parse with an error.
+You can opt in to tolerating duplicates:
 
 ```
 load-bibliography(bib, on-duplicate: "keep-first")  // drop later duplicates

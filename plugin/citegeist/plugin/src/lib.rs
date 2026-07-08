@@ -59,7 +59,7 @@ pub fn get_bib_map(
         .map_err(|e| format!("invalid UTF-8 in bibliography: {e}"))?;
 
     let bibliography = if on_duplicate == 0 {
-        // Default: hard error on a duplicate key (unchanged behaviour).
+        // Default: hard error on a duplicate key (pre-0.3.0 behaviour).
         Bibliography::parse(bib_contents)
             .map_err(|e| format!("failed to parse bibliography: {e}"))?
     } else {
@@ -69,6 +69,7 @@ pub fn get_bib_map(
         let mut raw = RawBibliography::parse(bib_contents)
             .map_err(|e| format!("failed to parse bibliography: {e}"))?;
         let mut seen = std::collections::HashSet::new();
+
         if on_duplicate == 2 {
             // keep last: walk from the end, keep first-seen-from-the-back, restore order
             let mut kept: Vec<_> = raw
@@ -79,15 +80,16 @@ pub fn get_bib_map(
                 .collect();
             kept.reverse();
             raw.entries = kept;
-        } else {
+        } else { // on_duplicate == 1
             // keep first (any non-zero value other than 2)
             raw.entries.retain(|e| seen.insert(e.v.key.v.to_string()));
         }
+
         Bibliography::from_raw(raw)
             .map_err(|e| format!("failed to parse bibliography: {e}"))?
     };
 
-    // IndexMap preserves source order from `bibliography.iter()` 
+    // IndexMap preserves source order from `bibliography.iter()`
     // to match biblatex's internal Vec<Entry>.
     let mut ret: IndexMap<String, MyEntry> = IndexMap::with_capacity(bibliography.len());
 
