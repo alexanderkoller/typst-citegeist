@@ -24,6 +24,7 @@ This will print the bibtex entry for the key `bender-koller-2020-climbing`:
 (
 	entry_type: "inproceedings",
 	entry_key: "bender-koller-2020-climbing",
+	position: 0,
 	fields: (
 		abstract: "The success of the large neural language models on many NLP tasks is
 		exciting. However, we find that these successes sometimes lead to hype in which these
@@ -64,15 +65,28 @@ This will print the bibtex entry for the key `bender-koller-2020-climbing`:
 Note that you have to `read` the contents of the Bibtex file yourself, because Typst packages can only read files within the package.
 
 
+## Duplicate keys
+
+By default, a duplicate citation key aborts the whole parse with an error.
+You can opt in to tolerating duplicates:
+
+```
+load-bibliography(bib, on-duplicate: "keep-first")  // drop later duplicates
+load-bibliography(bib, on-duplicate: "keep-last")   // drop earlier duplicates
+load-bibliography(bib, on-duplicate: "error")       // default
+```
+
 ## Details
 
 The function `load-bibliography` returns a dictionary with one element per bibliography entry in your Bibtex file. The key of the dictionary element is the Bibtex key (in the example, `bender-koller-2020-climbing`); the value is a data structure representing a Bibtex entry.
 
-A Bibtex entry is represented as another dictionary, see the example above. It has three keys: `entry_type` is the Bibtex entry type (e.g. `inproceedings` or `article`); `entry_key` is the key of the Bibtex entry; and `fields` contains all the fields of the Bibtex entry.
+A Bibtex entry is represented as another dictionary, see the example above. It has five keys: `entry_type` is the Bibtex entry type (e.g. `inproceedings` or `article`); `entry_key` is the key of the Bibtex entry; `position` is the zero-based position of the entry in the bibliography; `parsed_names` contains parsed author/editor/translator names (see below); and `fields` contains all the fields of the Bibtex entry.
+
+If duplicate entries are filtered with `on-duplicate`, `position` is counted after deduplication, so the returned entries are numbered from 0 without gaps.
 
 The `parsed_names` entry contains the values of all name-list fields, as parsed by the biblatex crate.
-The crate is pretty good at respecting the different ways in which names can be specified in the
-original Biblatex.
+
+Iteration over the dictionary returns entries in the order in which they appear in the BibTeX file.
 
 
 ## Efficiency note
@@ -93,6 +107,13 @@ cargo test --manifest-path plugin/citegeist/plugin/Cargo.toml
 
 
 ## Changelog
+
+## Unreleased
+
+- Entries are now returned in the order they appear in the `.bib` file (previously the order was unspecified, because entries were stored in a `HashMap`).
+- Entries now include a zero-based `position` field, counted in the returned entry order after any duplicate filtering.
+- New `on-duplicate` parameter: `"error"` (default, unchanged), `"keep-first"`, or `"keep-last"`, controlling how a duplicate citation key is handled instead of always aborting the parse.
+
 
 ## 0.2.2
 
