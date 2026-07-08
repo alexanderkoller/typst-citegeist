@@ -13,7 +13,7 @@ Use the `load-bibliography` command to parse a bibtex string into a Typst dictio
 #import "@preview/citegeist:0.2.2": load-bibliography
 
 #let bibtex_string = read("custom.bib")
-#let bib = load-bibliography(bibtex_string)
+#let bib = load-bibliography(bibtex_string, source: "custom.bib")
 
 #bib.bender-koller-2020-climbing
 ```
@@ -63,6 +63,7 @@ This will print the bibtex entry for the key `bender-koller-2020-climbing`:
 ```
 
 Note that you have to `read` the contents of the Bibtex file yourself, because Typst packages can only read files within the package.
+Typst passes only the file contents to Citegeist; `read("custom.bib")` does not automatically reveal the filename. Pass `source: "custom.bib"` if you want parse errors to include a source label.
 
 
 ## Duplicate keys

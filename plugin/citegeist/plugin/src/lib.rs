@@ -12,6 +12,9 @@ use serde_cbor::to_vec;
 use serde_cbor::value::Value;
 use serde_derive::{Deserialize, Serialize};
 
+mod diagnostics;
+use diagnostics::format_parse_error;
+
 const NAME_FIELDS: &[&str] = &[
     "afterword",
     "annotator",
@@ -52,12 +55,14 @@ struct MyEntry {
 ///        * 0 = error (the whole parse fails, as before);
 ///        * 1 = keep the first entry with a given key, drop later duplicates;
 ///        * 2 = keep the last entry with a given key, drop earlier duplicates.
+///   - `source_name_u8`: optional UTF-8 encoded source label for diagnostics.
 #[cfg_attr(target_arch = "wasm32", wasm_func)]
 pub fn get_bib_map(
     bib_contents_u8: &[u8],
     keep_raw_names_u8: &[u8],
     sentence_case_titles_u8: &[u8],
     on_duplicate_u8: &[u8],
+    source_name_u8: &[u8],
 ) -> Result<Vec<u8>, String> {
     let keep_raw_names = match keep_raw_names_u8.first() {
         Some(&b) => b != 0,
@@ -71,17 +76,25 @@ pub fn get_bib_map(
 
     let bib_contents = str::from_utf8(bib_contents_u8)
         .map_err(|e| format!("invalid UTF-8 in bibliography: {e}"))?;
+    let source_name = if source_name_u8.is_empty() {
+        None
+    } else {
+        Some(
+            str::from_utf8(source_name_u8)
+                .map_err(|e| format!("invalid UTF-8 in bibliography source name: {e}"))?,
+        )
+    };
 
     let bibliography = if on_duplicate == 0 {
         // Default: hard error on a duplicate key (pre-0.3.0 behaviour).
         Bibliography::parse(bib_contents)
-            .map_err(|e| format!("failed to parse bibliography: {e}"))?
+            .map_err(|e| format_parse_error(bib_contents, source_name, &e))?
     } else {
         // Tolerant modes: dedup at the raw level (before `from_raw`, which is
         // where the duplicate-key check lives), then build normally so xdata /
         // crossref resolution still runs.
         let mut raw = RawBibliography::parse(bib_contents)
-            .map_err(|e| format!("failed to parse bibliography: {e}"))?;
+            .map_err(|e| format_parse_error(bib_contents, source_name, &e))?;
         let mut seen = std::collections::HashSet::new();
 
         if on_duplicate == 2 {
@@ -100,7 +113,8 @@ pub fn get_bib_map(
             raw.entries.retain(|e| seen.insert(e.v.key.v.to_string()));
         }
 
-        Bibliography::from_raw(raw).map_err(|e| format!("failed to parse bibliography: {e}"))?
+        Bibliography::from_raw(raw)
+            .map_err(|e| format_parse_error(bib_contents, source_name, &e))?
     };
 
     // IndexMap preserves source order from `bibliography.iter()`

@@ -18,25 +18,41 @@ struct MyEntryWithValueNames {
 
 /// Helper: call get_bib_map with defaults (keep_raw_names=true, sentence_case_titles=true).
 fn parse_bib(bib: &str) -> HashMap<String, MyEntry> {
-    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[]).unwrap();
+    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[], &[]).unwrap();
     serde_cbor::from_slice(&result_bytes).unwrap()
 }
 
 /// Helper: call with keep_raw_names=false, sentence_case_titles=true.
 fn parse_bib_no_raw_names(bib: &str) -> HashMap<String, MyEntry> {
-    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[0], &[1], &[]).unwrap();
+    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[0], &[1], &[], &[]).unwrap();
     serde_cbor::from_slice(&result_bytes).unwrap()
 }
 
 /// Helper: call with keep_raw_names=true, sentence_case_titles=false.
 fn parse_bib_verbatim_titles(bib: &str) -> HashMap<String, MyEntry> {
-    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[0], &[]).unwrap();
+    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[0], &[], &[]).unwrap();
     serde_cbor::from_slice(&result_bytes).unwrap()
 }
 
 fn parse_bib_value_names(bib: &str) -> HashMap<String, MyEntryWithValueNames> {
-    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[]).unwrap();
+    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[], &[]).unwrap();
     serde_cbor::from_slice(&result_bytes).unwrap()
+}
+
+fn parse_bib_error(bib: &str, on_duplicate: &[u8], source: &[u8]) -> String {
+    citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], on_duplicate, source).unwrap_err()
+}
+
+fn assert_common_diagnostic(message: &str) {
+    assert!(
+        message.contains("failed to parse bibliography"),
+        "missing parse prefix:\n{message}"
+    );
+    assert!(message.contains("line "), "missing line:\n{message}");
+    assert!(message.contains("column "), "missing column:\n{message}");
+    assert!(message.contains("byte "), "missing byte span:\n{message}");
+    assert!(message.contains(" | "), "missing excerpt:\n{message}");
+    assert!(message.contains("^"), "missing caret:\n{message}");
 }
 
 #[test]
@@ -319,7 +335,7 @@ fn test_default_options() {
 }
 "#;
     // Empty options = defaults (keep_raw_names=true, sentence_case_titles=true)
-    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[], &[], &[]).unwrap();
+    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[], &[], &[], &[]).unwrap();
     let result: HashMap<String, MyEntry> = serde_cbor::from_slice(&result_bytes).unwrap();
     let entry = result.get("test").unwrap();
 
@@ -371,7 +387,7 @@ fn test_sentence_case_titles_false() {
 
 /// Helper: deserialize into an order-preserving map to assert entry order.
 fn parse_bib_ordered(bib: &str) -> indexmap::IndexMap<String, MyEntry> {
-    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[]).unwrap();
+    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[], &[]).unwrap();
     serde_cbor::from_slice(&result_bytes).unwrap()
 }
 
@@ -400,15 +416,135 @@ fn test_duplicate_key_errors_by_default() {
     let bib = "@book{k, title={First}, author={A}, year={2020}}\n\
                @book{k, title={Second}, author={B}, year={2021}}";
     // on_duplicate = 0 (empty) -> hard error, unchanged behaviour.
-    assert!(citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[]).is_err());
-    assert!(citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[0]).is_err());
+    assert!(citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[], &[]).is_err());
+    assert!(citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[0], &[]).is_err());
+}
+
+#[test]
+fn test_missing_comma_diagnostic() {
+    let bib = r#"@inproceedings{smith2024demo,
+  title = {A Demo}
+  pages = {7118-7118}
+}"#;
+    let message = parse_bib_error(bib, &[], &[]);
+
+    assert_common_diagnostic(&message);
+    assert!(message.contains("expected comma"), "{message}");
+    assert!(
+        message.contains("while parsing @inproceedings{smith2024demo}"),
+        "{message}"
+    );
+    assert!(message.contains("pages = {7118-7118}"), "{message}");
+    assert!(
+        message.contains("hint: BibTeX fields must be separated by commas"),
+        "{message}"
+    );
+}
+
+#[test]
+fn test_entry_context_ignores_at_sign_in_field_value() {
+    let bib = r#"@article{real,
+  title = {Email @book{fake}},
+  year = {2024}
+  journal = {Journal}
+}"#;
+    let message = parse_bib_error(bib, &[], &[]);
+
+    assert_common_diagnostic(&message);
+    assert!(
+        message.contains("while parsing @article{real}"),
+        "{message}"
+    );
+    assert!(!message.contains("while parsing @book{fake}"), "{message}");
+}
+
+#[test]
+fn test_entry_context_ignores_at_sign_in_comment() {
+    let bib = r#"@article{real,
+  title = {A Demo}, % @book{fake}
+  year = {2024}
+  journal = {Journal}
+}"#;
+    let message = parse_bib_error(bib, &[], &[]);
+
+    assert_common_diagnostic(&message);
+    assert!(
+        message.contains("while parsing @article{real}"),
+        "{message}"
+    );
+    assert!(!message.contains("while parsing @book{fake}"), "{message}");
+}
+
+#[test]
+fn test_unexpected_eof_diagnostic() {
+    let bib = r#"@article{k,
+  title = {A Demo"#;
+    let message = parse_bib_error(bib, &[], &[]);
+
+    assert_common_diagnostic(&message);
+    assert!(message.contains("unexpected end of file"), "{message}");
+    assert!(message.contains("while parsing @article{k}"), "{message}");
+    assert!(
+        message.contains("hint: The bibliography ended"),
+        "{message}"
+    );
+}
+
+#[test]
+fn test_duplicate_key_diagnostic() {
+    let bib = "@book{k, title={First}, author={A}, year={2020}}\n\
+               @book{k, title={Second}, author={B}, year={2021}}";
+    let message = parse_bib_error(bib, &[], &[]);
+
+    assert_common_diagnostic(&message);
+    assert!(message.contains("duplicate key \"k\""), "{message}");
+    assert!(message.contains("while parsing @book{k}"), "{message}");
+    assert!(
+        message.contains("hint: Citation keys must be unique"),
+        "{message}"
+    );
+}
+
+#[test]
+fn test_unknown_abbreviation_diagnostic() {
+    let bib = r#"@article{k,
+  title = not_defined_abbrev,
+  year = {2024}
+}"#;
+    let message = parse_bib_error(bib, &[], &[]);
+
+    assert_common_diagnostic(&message);
+    assert!(
+        message.contains("unknown abbreviation \"not_defined_abbrev\""),
+        "{message}"
+    );
+    assert!(message.contains("while parsing @article{k}"), "{message}");
+    assert!(
+        message.contains("hint: Define the abbreviation"),
+        "{message}"
+    );
+}
+
+#[test]
+fn test_source_name_included_in_diagnostic() {
+    let bib = r#"@article{k,
+  title = {A Demo}
+  year = {2024}
+}"#;
+    let message = parse_bib_error(bib, &[], b"bibs/paper.bib");
+
+    assert_common_diagnostic(&message);
+    assert!(
+        message.starts_with("failed to parse bibliography in bibs/paper.bib\n"),
+        "{message}"
+    );
 }
 
 #[test]
 fn test_duplicate_key_keep_first() {
     let bib = "@book{k, title={First}, author={A}, year={2020}}\n\
                @book{k, title={Second}, author={B}, year={2021}}";
-    let bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[1]).unwrap();
+    let bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[1], &[]).unwrap();
     let result: HashMap<String, MyEntry> = serde_cbor::from_slice(&bytes).unwrap();
     assert_eq!(result.len(), 1);
     assert_eq!(result["k"].fields["title"], "First");
@@ -419,7 +555,7 @@ fn test_duplicate_key_keep_first() {
 fn test_duplicate_key_keep_last() {
     let bib = "@book{k, title={First}, author={A}, year={2020}}\n\
                @book{k, title={Second}, author={B}, year={2021}}";
-    let bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[2]).unwrap();
+    let bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[2], &[]).unwrap();
     let result: HashMap<String, MyEntry> = serde_cbor::from_slice(&bytes).unwrap();
     assert_eq!(result.len(), 1);
     assert_eq!(result["k"].fields["title"], "Second");
@@ -433,7 +569,7 @@ fn test_positions_are_renumbered_after_deduplication() {
                @book{b, title={B0}, author={B}, year={2020}}\n\
                @book{k, title={K1}, author={K}, year={2021}}\n\
                @book{c, title={C0}, author={C}, year={2020}}";
-    let bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[2]).unwrap();
+    let bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[2], &[]).unwrap();
     let result: indexmap::IndexMap<String, MyEntry> = serde_cbor::from_slice(&bytes).unwrap();
 
     let keys: Vec<&str> = result.keys().map(|key| key.as_str()).collect();
