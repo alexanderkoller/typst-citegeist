@@ -10,7 +10,7 @@ Citegeist is a thin wrapper around the [Typst biblatex crate](https://github.com
 Use the `load-bibliography` command to parse a bibtex string into a Typst dictionary:
 
 ```
-#import "@preview/citegeist:0.2.2": load-bibliography
+#import "@preview/citegeist:0.3.0": load-bibliography
 
 #let bibtex_string = read("custom.bib")
 #let bib = load-bibliography(bibtex_string, source: "custom.bib")
@@ -138,10 +138,14 @@ cargo test --manifest-path plugin/citegeist/plugin/Cargo.toml
 
 ## Unreleased
 
-- Entries are now returned in the order they appear in the `.bib` file (previously the order was unspecified, because entries were stored in a `HashMap`).
+## 0.3.0
+
+- Much more informative error reporting.
+- Entries are now returned in the order they appear in the `.bib` file (previously the order was unspecified, because entries were stored in a `HashMap`; thanks to @SchrodingerBlume for the pull request).
 - Entries now include a zero-based `position` field, counted in the returned entry order after any duplicate filtering.
-- New `on-duplicate` parameter: `"error"` (default, unchanged), `"keep-first"`, or `"keep-last"`, controlling how a duplicate citation key is handled instead of always aborting the parse.
+- New `on-duplicate` parameter: `"error"` (default, unchanged), `"keep-first"`, or `"keep-last"`, controlling how a duplicate citation key is handled instead of always aborting the parse (thanks to SchrodingerBlume for the pull request).
 - `parsed_names` now preserves BibLaTeX extended name options as `id`, `given-initials`, `prefix-initials`, and `use-prefix` keys when they are present.
+- Bumped biblatex dependency to 0.12.
 
 
 ## 0.2.2

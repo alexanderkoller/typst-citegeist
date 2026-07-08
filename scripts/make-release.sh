@@ -3,18 +3,124 @@
 set -euo pipefail
 
 PACKAGE=citegeist
-VERSION=${1:-}
+UPDATE_SOURCES=false
+VERSION=""
 DOC_PATHS=(docs)
+PLUGIN_DIR="plugin/$PACKAGE/plugin"
+
+usage() {
+    echo "Usage: $0 [--update-sources] VERSION"
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --update-sources)
+            UPDATE_SOURCES=true
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        -*)
+            echo "Unknown option: $1" >&2
+            usage >&2
+            exit 1
+            ;;
+        *)
+            if [ -n "$VERSION" ]; then
+                echo "Unexpected argument: $1" >&2
+                usage >&2
+                exit 1
+            fi
+            VERSION=$1
+            ;;
+    esac
+    shift
+done
 
 if [ -z "$VERSION" ];
 then
-    echo "You need to specify a version number."
+    echo "You need to specify a version number." >&2
+    usage >&2
     exit 1
 fi
 
+update_sources() {
+    local version=$1
+
+    VERSION="$version" PACKAGE="$PACKAGE" perl -0pi -e '
+        my $version = $ENV{"VERSION"};
+        my $package = quotemeta($ENV{"PACKAGE"});
+        s{\@preview/$package:\d+\.\d+\.\d+}{\@preview/$ENV{"PACKAGE"}:$version}g;
+        s{\A(.*?^## Changelog\s+?)## (?:Unreleased|\d+\.\d+\.\d+)}{$1## $version}ms;
+    ' README.md examples/main.typ
+
+    VERSION="$version" perl -0pi -e '
+        my $version = $ENV{"VERSION"};
+        s{^version = "\d+\.\d+\.\d+"}{version = "$version"}m;
+    ' "$PLUGIN_DIR/Cargo.toml"
+
+    if VERSION="$version" PACKAGE="$PACKAGE" perl -ne '
+        BEGIN {
+            $version = $ENV{"VERSION"};
+            $package = $ENV{"PACKAGE"};
+            $found_stale = 0;
+        }
+        if (m{\@preview/\Q$package\E:(\d+\.\d+\.\d+)} && $1 ne $version) {
+            print STDERR "$ARGV:$.: found stale \@preview/$package:$1 import\n";
+            $found_stale = 1;
+        }
+        END {
+            exit($found_stale ? 0 : 1);
+        }
+    ' README.md examples/main.typ; then
+        echo "Source update failed: found a stale @preview/$PACKAGE import." >&2
+        exit 1
+    fi
+
+    if ! grep -q "^## $version$" README.md; then
+        echo "Source update failed: README.md changelog was not updated to $version." >&2
+        exit 1
+    fi
+
+    if ! grep -q "^version = \"$version\"$" "$PLUGIN_DIR/Cargo.toml"; then
+        echo "Source update failed: $PLUGIN_DIR/Cargo.toml was not updated to $version." >&2
+        exit 1
+    fi
+}
+
+check_package_versions() {
+    local version=$1
+
+    if VERSION="$version" PACKAGE="$PACKAGE" perl -ne '
+        BEGIN {
+            $version = $ENV{"VERSION"};
+            $package = $ENV{"PACKAGE"};
+            $found_stale = 0;
+        }
+        if (m{\@preview/\Q$package\E:(\d+\.\d+\.\d+)} && $1 ne $version) {
+            print STDERR "$ARGV:$.: found stale \@preview/$package:$1 import\n";
+            $found_stale = 1;
+        }
+        END {
+            exit($found_stale ? 0 : 1);
+        }
+    ' README.md examples/main.typ "$RELEASE_DIR/README.md"; then
+        echo "Release check failed: found a stale @preview/$PACKAGE import." >&2
+        exit 1
+    fi
+
+    if ! grep -q "^version = \"$version\"$" "$RELEASE_DIR/typst.toml"; then
+        echo "Release check failed: $RELEASE_DIR/typst.toml was not updated to $version." >&2
+        exit 1
+    fi
+}
 
 RELEASE_DIR="release/preview/$PACKAGE/$VERSION"
-PLUGIN_DIR="plugin/$PACKAGE/plugin"
+
+if [ "$UPDATE_SOURCES" = true ]; then
+    update_sources "$VERSION"
+fi
 
 # Check that WASM is up to date.
 
@@ -77,5 +183,7 @@ if [ ${#EXCLUDES[@]} -gt 0 ]; then
         echo "]"
     } >> "$RELEASE_DIR/typst.toml"
 fi
+
+check_package_versions "$VERSION"
 
 echo "Package is ready for release in $RELEASE_DIR."
