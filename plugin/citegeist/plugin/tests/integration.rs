@@ -5,6 +5,7 @@ use serde_derive::Deserialize;
 struct MyEntry {
     entry_type: String,
     entry_key: String,
+    position: usize,
     fields: HashMap<String, String>,
     parsed_names: HashMap<String, Vec<HashMap<String, String>>>,
 }
@@ -43,6 +44,7 @@ fn test_parse_simple_bib() {
     let entry = result.get("test-article").unwrap();
     assert_eq!(entry.entry_type, "article");
     assert_eq!(entry.entry_key, "test-article");
+    assert_eq!(entry.position, 0);
     assert_eq!(entry.fields.get("title").unwrap(), "Test title");
     assert_eq!(entry.fields.get("year").unwrap(), "2024");
 
@@ -132,6 +134,9 @@ fn test_parse_multiple_entries() {
     assert_eq!(result.get("first").unwrap().entry_type, "article");
     assert_eq!(result.get("second").unwrap().entry_type, "book");
     assert_eq!(result.get("third").unwrap().entry_type, "misc");
+    assert_eq!(result.get("first").unwrap().position, 0);
+    assert_eq!(result.get("second").unwrap().position, 1);
+    assert_eq!(result.get("third").unwrap().position, 2);
 }
 
 #[test]
@@ -304,6 +309,9 @@ fn test_entry_order_preserved() {
     let result = parse_bib_ordered(bib);
     let order: Vec<&str> = result.keys().map(|s| s.as_str()).collect();
     assert_eq!(order, vec!["zebra", "alpha", "mango", "beta", "xray"]);
+
+    let positions: Vec<usize> = result.values().map(|entry| entry.position).collect();
+    assert_eq!(positions, vec![0, 1, 2, 3, 4]);
 }
 
 // ---- duplicate-key handling ----
@@ -325,6 +333,7 @@ fn test_duplicate_key_keep_first() {
     let result: HashMap<String, MyEntry> = serde_cbor::from_slice(&bytes).unwrap();
     assert_eq!(result.len(), 1);
     assert_eq!(result["k"].fields["title"], "First");
+    assert_eq!(result["k"].position, 0);
 }
 
 #[test]
@@ -335,4 +344,23 @@ fn test_duplicate_key_keep_last() {
     let result: HashMap<String, MyEntry> = serde_cbor::from_slice(&bytes).unwrap();
     assert_eq!(result.len(), 1);
     assert_eq!(result["k"].fields["title"], "Second");
+    assert_eq!(result["k"].position, 0);
+}
+
+#[test]
+fn test_positions_are_renumbered_after_deduplication() {
+    let bib = "@book{a, title={A0}, author={A}, year={2020}}\n\
+               @book{k, title={K0}, author={K}, year={2020}}\n\
+               @book{b, title={B0}, author={B}, year={2020}}\n\
+               @book{k, title={K1}, author={K}, year={2021}}\n\
+               @book{c, title={C0}, author={C}, year={2020}}";
+    let bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[2]).unwrap();
+    let result: indexmap::IndexMap<String, MyEntry> = serde_cbor::from_slice(&bytes).unwrap();
+
+    let keys: Vec<&str> = result.keys().map(|key| key.as_str()).collect();
+    let positions: Vec<usize> = result.values().map(|entry| entry.position).collect();
+
+    assert_eq!(keys, vec!["a", "b", "k", "c"]);
+    assert_eq!(positions, vec![0, 1, 2, 3]);
+    assert_eq!(result["k"].fields["title"], "K1");
 }

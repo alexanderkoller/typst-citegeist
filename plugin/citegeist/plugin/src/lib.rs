@@ -21,6 +21,7 @@ const NAME_FIELDS: &[&str] = &[
 struct MyEntry {
     entry_type: String,
     entry_key: String,
+    position: usize,
     fields: IndexMap<String, String>,
     parsed_names: IndexMap<String, Vec<HashMap<String, String>>>,
 }
@@ -93,20 +94,26 @@ pub fn get_bib_map(
     // to match biblatex's internal Vec<Entry>.
     let mut ret: IndexMap<String, MyEntry> = IndexMap::with_capacity(bibliography.len());
 
-    for entry in bibliography.iter() {
+    for (position, entry) in bibliography.iter().enumerate() {
         ret.insert(
             entry.key.clone(),
-            convert_entry(entry, keep_raw_names, sentence_case_titles),
+            convert_entry(entry, position, keep_raw_names, sentence_case_titles),
         );
     }
 
     to_vec(&ret).map_err(|e| format!("failed to serialize result: {e}"))
 }
 
-fn convert_entry(entry: &Entry, keep_raw_names: bool, sentence_case_titles: bool) -> MyEntry {
+fn convert_entry(
+    entry: &Entry,
+    position: usize,
+    keep_raw_names: bool,
+    sentence_case_titles: bool,
+) -> MyEntry {
     let mut ret = MyEntry {
         entry_type: entry.entry_type.to_string(),
         entry_key: entry.key.clone(),
+        position,
         fields: IndexMap::with_capacity(entry.fields.len()),
         parsed_names: IndexMap::new(),
     };
