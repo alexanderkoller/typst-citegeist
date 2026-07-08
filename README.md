@@ -76,6 +76,35 @@ load-bibliography(bib, on-duplicate: "keep-last")   // drop earlier duplicates
 load-bibliography(bib, on-duplicate: "error")       // default
 ```
 
+
+
+## Parsed names
+
+The `parsed_names` entry contains the values of all BibTeX/BibLaTeX name-list fields, as parsed by the Typst biblatex crate. This includes fields such as `author`, `editor`, and `translator`. Each entry in `parsed_names` is an array of name dictionaries; for example, `entry.parsed_names.author.at(0)` is the first parsed author.
+
+Every parsed name dictionary contains these string fields:
+
+- `family`: the surname or family name, e.g. `Rousse` in `Jean de la Rousse`.
+- `given`: the given name or forename, e.g. `Jean`.
+- `prefix`: a name particle that belongs before the family name, e.g. `de la`. This is often empty.
+- `suffix`: a suffix after the family name, e.g. `Jr.`. This is often empty.
+
+BibLaTeX also supports an extended name format where a `.bib` file can attach extra metadata to a name:
+
+```
+author = {given=Jean Pierre Simon, given-i=JPS, prefix=de la, prefix-i=d, family=Rousse}
+```
+
+Citegeist preserves the following BibLaTeX name options when they are present:
+
+- `given-initials`: manual initials for the given name, from BibLaTeX's `given-i` option. In the example above, this is `JPS`. This is useful when initials should not be computed mechanically from the words in `given`.
+- `prefix-initials`: manual initials for the name prefix, from BibLaTeX's `prefix-i` option. In the example above, this is `d` for the prefix `de la`.
+- `use-prefix`: a boolean from BibLaTeX's `useprefix` option. It indicates whether the prefix should be treated as part of the family name for bibliography logic such as sorting or label generation.
+- `id`: an explicit identity string for the person. This is not normally printed; it gives downstream code a stable way to decide whether two differently written names should be treated as the same person.
+
+Undefined name options are omitted from the name dictionary instead of being represented as `none`.
+
+
 ## Details
 
 The function `load-bibliography` returns a dictionary with one element per bibliography entry in your Bibtex file. The key of the dictionary element is the Bibtex key (in the example, `bender-koller-2020-climbing`); the value is a data structure representing a Bibtex entry.
@@ -83,8 +112,6 @@ The function `load-bibliography` returns a dictionary with one element per bibli
 A Bibtex entry is represented as another dictionary, see the example above. It has five keys: `entry_type` is the Bibtex entry type (e.g. `inproceedings` or `article`); `entry_key` is the key of the Bibtex entry; `position` is the zero-based position of the entry in the bibliography; `parsed_names` contains parsed author/editor/translator names (see below); and `fields` contains all the fields of the Bibtex entry.
 
 If duplicate entries are filtered with `on-duplicate`, `position` is counted after deduplication, so the returned entries are numbered from 0 without gaps.
-
-The `parsed_names` entry contains the values of all name-list fields, as parsed by the biblatex crate.
 
 Iteration over the dictionary returns entries in the order in which they appear in the BibTeX file.
 
@@ -113,6 +140,7 @@ cargo test --manifest-path plugin/citegeist/plugin/Cargo.toml
 - Entries are now returned in the order they appear in the `.bib` file (previously the order was unspecified, because entries were stored in a `HashMap`).
 - Entries now include a zero-based `position` field, counted in the returned entry order after any duplicate filtering.
 - New `on-duplicate` parameter: `"error"` (default, unchanged), `"keep-first"`, or `"keep-last"`, controlling how a duplicate citation key is handled instead of always aborting the parse.
+- `parsed_names` now preserves BibLaTeX extended name options as `id`, `given-initials`, `prefix-initials`, and `use-prefix` keys when they are present.
 
 
 ## 0.2.2

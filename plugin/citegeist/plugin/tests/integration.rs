@@ -1,5 +1,6 @@
-use std::collections::HashMap;
+use serde_cbor::value::Value;
 use serde_derive::Deserialize;
+use std::collections::HashMap;
 
 #[derive(Debug, Deserialize)]
 struct MyEntry {
@@ -8,6 +9,11 @@ struct MyEntry {
     position: usize,
     fields: HashMap<String, String>,
     parsed_names: HashMap<String, Vec<HashMap<String, String>>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct MyEntryWithValueNames {
+    parsed_names: HashMap<String, Vec<HashMap<String, Value>>>,
 }
 
 /// Helper: call get_bib_map with defaults (keep_raw_names=true, sentence_case_titles=true).
@@ -25,6 +31,11 @@ fn parse_bib_no_raw_names(bib: &str) -> HashMap<String, MyEntry> {
 /// Helper: call with keep_raw_names=true, sentence_case_titles=false.
 fn parse_bib_verbatim_titles(bib: &str) -> HashMap<String, MyEntry> {
     let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[0], &[]).unwrap();
+    serde_cbor::from_slice(&result_bytes).unwrap()
+}
+
+fn parse_bib_value_names(bib: &str) -> HashMap<String, MyEntryWithValueNames> {
+    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[]).unwrap();
     serde_cbor::from_slice(&result_bytes).unwrap()
 }
 
@@ -77,6 +88,64 @@ fn test_parse_multiple_authors() {
     assert_eq!(authors[0].get("family").unwrap(), "Smith");
     assert_eq!(authors[1].get("family").unwrap(), "Jones");
     assert_eq!(authors[2].get("family").unwrap(), "Williams");
+}
+
+#[test]
+fn test_extended_name_options_are_exposed_when_present() {
+    let bib = r#"
+@book{extended-names,
+    title = "Extended Names",
+    author = "given=Simon, prefix=de, family=Beumont, useprefix=true and given=Jean Pierre Simon, given-i=JPS, prefix=de la, prefix-i=d, family=Rousse, id=rousse-jps",
+    editor = "Doe, Jane",
+    year = "2026",
+}
+"#;
+    let result = parse_bib_value_names(bib);
+    let entry = result.get("extended-names").unwrap();
+
+    let authors = entry.parsed_names.get("author").unwrap();
+    assert_eq!(authors.len(), 2);
+
+    assert_eq!(
+        authors[0].get("family"),
+        Some(&Value::Text("Beumont".into()))
+    );
+    assert_eq!(authors[0].get("given"), Some(&Value::Text("Simon".into())));
+    assert_eq!(authors[0].get("prefix"), Some(&Value::Text("de".into())));
+    assert_eq!(authors[0].get("use-prefix"), Some(&Value::Bool(true)));
+    assert!(!authors[0].contains_key("given-initials"));
+    assert!(!authors[0].contains_key("prefix-initials"));
+    assert!(!authors[0].contains_key("id"));
+
+    assert_eq!(
+        authors[1].get("family"),
+        Some(&Value::Text("Rousse".into()))
+    );
+    assert_eq!(
+        authors[1].get("given"),
+        Some(&Value::Text("Jean Pierre Simon".into()))
+    );
+    assert_eq!(authors[1].get("prefix"), Some(&Value::Text("de la".into())));
+    assert_eq!(
+        authors[1].get("given-initials"),
+        Some(&Value::Text("JPS".into()))
+    );
+    assert_eq!(
+        authors[1].get("prefix-initials"),
+        Some(&Value::Text("d".into()))
+    );
+    assert_eq!(
+        authors[1].get("id"),
+        Some(&Value::Text("rousse-jps".into()))
+    );
+    assert!(!authors[1].contains_key("use-prefix"));
+
+    let editors = entry.parsed_names.get("editor").unwrap();
+    assert_eq!(editors[0].get("family"), Some(&Value::Text("Doe".into())));
+    assert!(!editors[0].contains_key("given-initials"));
+    assert!(!editors[0].contains_key("prefix-initials"));
+    assert!(!editors[0].contains_key("use-prefix"));
+    assert!(!editors[0].contains_key("id"));
 }
 
 #[test]
@@ -190,7 +259,11 @@ fn test_real_world_entry() {
     let editors = entry.parsed_names.get("editor").unwrap();
     assert_eq!(editors.len(), 2);
 
-    assert!(entry.fields.get("url").unwrap().contains("aclanthology.org"));
+    assert!(entry
+        .fields
+        .get("url")
+        .unwrap()
+        .contains("aclanthology.org"));
 }
 
 #[test]
@@ -269,7 +342,10 @@ fn test_sentence_case_titles_true() {
     let entry = result.get("test").unwrap();
 
     // sentence case: first char uppercase, rest lowercase, braced text preserved
-    assert_eq!(entry.fields.get("title").unwrap(), "Test title with Proper nouns");
+    assert_eq!(
+        entry.fields.get("title").unwrap(),
+        "Test title with Proper nouns"
+    );
 }
 
 #[test]
@@ -285,7 +361,10 @@ fn test_sentence_case_titles_false() {
     let entry = result.get("test").unwrap();
 
     // verbatim: preserved as-is (braces stripped but case unchanged)
-    assert_eq!(entry.fields.get("title").unwrap(), "Test Title With Proper Nouns");
+    assert_eq!(
+        entry.fields.get("title").unwrap(),
+        "Test Title With Proper Nouns"
+    );
 }
 
 // ---- order preservation (entries returned in source order) ----

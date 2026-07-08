@@ -8,7 +8,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 wasm-minimal-protocol = { path = "../" }
-biblatex = "0.11"
+biblatex = "0.12"
 indexmap = { version = "2", features = ["serde"] }
 serde = { version = "1.0.204", features = ["derive"] }
 serde_cbor = "0.10"

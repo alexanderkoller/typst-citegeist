@@ -1,20 +1,33 @@
-#[cfg(target_arch = "wasm32")]
-use wasm_minimal_protocol::*;
 use biblatex::*;
 use core::str;
-use std::collections::HashMap;
 use indexmap::IndexMap;
+use std::collections::HashMap;
+#[cfg(target_arch = "wasm32")]
+use wasm_minimal_protocol::*;
 
 #[cfg(target_arch = "wasm32")]
 initiate_protocol!();
 
-use serde_derive::{Deserialize, Serialize};
 use serde_cbor::to_vec;
+use serde_cbor::value::Value;
+use serde_derive::{Deserialize, Serialize};
 
 const NAME_FIELDS: &[&str] = &[
-    "afterword", "annotator", "author", "bookauthor", "commentator",
-    "editor", "editora", "editorb", "editorc", "foreword", "holder",
-    "introduction", "shortauthor", "shorteditor", "translator",
+    "afterword",
+    "annotator",
+    "author",
+    "bookauthor",
+    "commentator",
+    "editor",
+    "editora",
+    "editorb",
+    "editorc",
+    "foreword",
+    "holder",
+    "introduction",
+    "shortauthor",
+    "shorteditor",
+    "translator",
 ];
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -23,7 +36,7 @@ struct MyEntry {
     entry_key: String,
     position: usize,
     fields: IndexMap<String, String>,
-    parsed_names: IndexMap<String, Vec<HashMap<String, String>>>,
+    parsed_names: IndexMap<String, Vec<HashMap<String, Value>>>,
 }
 
 /// Main entry point for the plugin.
@@ -81,13 +94,13 @@ pub fn get_bib_map(
                 .collect();
             kept.reverse();
             raw.entries = kept;
-        } else { // on_duplicate == 1
+        } else {
+            // on_duplicate == 1
             // keep first (any non-zero value other than 2)
             raw.entries.retain(|e| seen.insert(e.v.key.v.to_string()));
         }
 
-        Bibliography::from_raw(raw)
-            .map_err(|e| format!("failed to parse bibliography: {e}"))?
+        Bibliography::from_raw(raw).map_err(|e| format!("failed to parse bibliography: {e}"))?
     };
 
     // IndexMap preserves source order from `bibliography.iter()`
@@ -121,17 +134,8 @@ fn convert_entry(
     for (key, chunks) in &entry.fields {
         if NAME_FIELDS.contains(&key.as_str()) {
             if let Ok(names) = <Vec<Person> as Type>::from_chunks(chunks) {
-                let parsed: Vec<HashMap<String, String>> = names
-                    .into_iter()
-                    .map(|p| {
-                        HashMap::from([
-                            ("family".into(), p.name),
-                            ("given".into(), p.given_name),
-                            ("prefix".into(), p.prefix),
-                            ("suffix".into(), p.suffix),
-                        ])
-                    })
-                    .collect();
+                let parsed: Vec<HashMap<String, Value>> =
+                    names.into_iter().map(person_to_map).collect();
                 ret.parsed_names.insert(key.clone(), parsed);
             }
             if keep_raw_names {
@@ -161,4 +165,32 @@ fn convert_entry(
     }
 
     ret
+}
+
+fn text(value: String) -> Value {
+    Value::Text(value)
+}
+
+fn person_to_map(p: Person) -> HashMap<String, Value> {
+    let mut name = HashMap::from([
+        ("family".into(), text(p.name)),
+        ("given".into(), text(p.given_name)),
+        ("prefix".into(), text(p.prefix)),
+        ("suffix".into(), text(p.suffix)),
+    ]);
+
+    if let Some(id) = p.id {
+        name.insert("id".into(), text(id));
+    }
+    if let Some(prefix_initials) = p.prefix_initials {
+        name.insert("prefix-initials".into(), text(prefix_initials));
+    }
+    if let Some(given_initials) = p.given_initials {
+        name.insert("given-initials".into(), text(given_initials));
+    }
+    if let Some(use_prefix) = p.use_prefix {
+        name.insert("use-prefix".into(), Value::Bool(use_prefix));
+    }
+
+    name
 }

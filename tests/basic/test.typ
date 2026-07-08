@@ -39,3 +39,30 @@ Hello World
 #assert("knuth1990" in bib)
 #assert.eq(bib.knuth1990.entry_type, "book")
 #assert.eq(bib.knuth1990.fields.title, "The TeX book")
+
+
+#let extended-name-bib = "
+@book{extended,
+  author = {given=Simon, prefix=de, family=Beumont, useprefix=true and given=Jean Pierre Simon, given-i=JPS, prefix=de la, prefix-i=d, family=Rousse, id=rousse-jps},
+  title = {Extended Names},
+  year = {2026},
+}
+"
+
+#let bib = load-bibliography(extended-name-bib)
+#let authors = bib.extended.parsed_names.author
+
+#assert.eq(authors.at(0).family, "Beumont")
+#assert.eq(authors.at(0).prefix, "de")
+#assert.eq(authors.at(0).at("use-prefix"), true)
+#assert(not authors.at(0).keys().contains("given-initials"))
+#assert(not authors.at(0).keys().contains("prefix-initials"))
+#assert(not authors.at(0).keys().contains("id"))
+
+#assert.eq(authors.at(1).family, "Rousse")
+#assert.eq(authors.at(1).given, "Jean Pierre Simon")
+#assert.eq(authors.at(1).prefix, "de la")
+#assert.eq(authors.at(1).at("given-initials"), "JPS")
+#assert.eq(authors.at(1).at("prefix-initials"), "d")
+#assert.eq(authors.at(1).id, "rousse-jps")
+#assert(not authors.at(1).keys().contains("use-prefix"))
