@@ -5,7 +5,7 @@ set -euo pipefail
 PACKAGE=citegeist
 UPDATE_SOURCES=false
 VERSION=""
-DOC_PATHS=(docs)
+declare -a DOC_PATHS=()
 PLUGIN_DIR="plugin/$PACKAGE/plugin"
 
 usage() {
@@ -51,9 +51,9 @@ update_sources() {
     VERSION="$version" PACKAGE="$PACKAGE" perl -0pi -e '
         my $version = $ENV{"VERSION"};
         my $package = quotemeta($ENV{"PACKAGE"});
-        s{\@preview/$package:\d+\.\d+\.\d+}{\@preview/$ENV{"PACKAGE"}:$version}g;
+        s{\@(preview|local)/$package:\d+\.\d+\.\d+}{\@$1/$ENV{"PACKAGE"}:$version}g;
         s{\A(.*?^## Changelog\s+?)## (?:Unreleased|\d+\.\d+\.\d+)}{$1## $version}ms;
-    ' README.md examples/main.typ
+    ' README.md examples/main.typ tests/local-install.typ
 
     VERSION="$version" perl -0pi -e '
         my $version = $ENV{"VERSION"};
@@ -66,15 +66,15 @@ update_sources() {
             $package = $ENV{"PACKAGE"};
             $found_stale = 0;
         }
-        if (m{\@preview/\Q$package\E:(\d+\.\d+\.\d+)} && $1 ne $version) {
-            print STDERR "$ARGV:$.: found stale \@preview/$package:$1 import\n";
+        if (m{\@(preview|local)/\Q$package\E:(\d+\.\d+\.\d+)} && $2 ne $version) {
+            print STDERR "$ARGV:$.: found stale \@$1/$package:$2 import\n";
             $found_stale = 1;
         }
         END {
             exit($found_stale ? 0 : 1);
         }
-    ' README.md examples/main.typ; then
-        echo "Source update failed: found a stale @preview/$PACKAGE import." >&2
+    ' README.md examples/main.typ tests/local-install.typ; then
+        echo "Source update failed: found a stale @preview/$PACKAGE or @local/$PACKAGE import." >&2
         exit 1
     fi
 
@@ -98,15 +98,15 @@ check_package_versions() {
             $package = $ENV{"PACKAGE"};
             $found_stale = 0;
         }
-        if (m{\@preview/\Q$package\E:(\d+\.\d+\.\d+)} && $1 ne $version) {
-            print STDERR "$ARGV:$.: found stale \@preview/$package:$1 import\n";
+        if (m{\@(preview|local)/\Q$package\E:(\d+\.\d+\.\d+)} && $2 ne $version) {
+            print STDERR "$ARGV:$.: found stale \@$1/$package:$2 import\n";
             $found_stale = 1;
         }
         END {
             exit($found_stale ? 0 : 1);
         }
-    ' README.md examples/main.typ "$RELEASE_DIR/README.md"; then
-        echo "Release check failed: found a stale @preview/$PACKAGE import." >&2
+    ' README.md examples/main.typ tests/local-install.typ "$RELEASE_DIR/README.md"; then
+        echo "Release check failed: found a stale @preview/$PACKAGE or @local/$PACKAGE import." >&2
         exit 1
     fi
 
@@ -140,30 +140,35 @@ cp LICENSE "$RELEASE_DIR/"
 cp "$PLUGIN_DIR/target/wasm32-unknown-unknown/release/$PACKAGE.wasm" "$RELEASE_DIR/"
 
 EXCLUDES=()
-for path in "${DOC_PATHS[@]}"; do
-    if [ -d "$path" ]; then
-        mkdir -p "$RELEASE_DIR/$path"
-        cp -R "$path"/. "$RELEASE_DIR/$path"/
-        EXCLUDES+=("/$path/**")
-    elif [ -f "$path" ]; then
-        mkdir -p "$RELEASE_DIR/$(dirname "$path")"
-        cp "$path" "$RELEASE_DIR/$path"
-        EXCLUDES+=("/$path")
-    fi
-done
+if [ "${#DOC_PATHS[@]}" -gt 0 ]; then
+    for path in "${DOC_PATHS[@]}"; do
+        if [ -d "$path" ]; then
+            mkdir -p "$RELEASE_DIR/$path"
+            cp -R "$path"/. "$RELEASE_DIR/$path"/
+            EXCLUDES+=("/$path/**")
+        elif [ -f "$path" ]; then
+            mkdir -p "$RELEASE_DIR/$(dirname "$path")"
+            cp "$path" "$RELEASE_DIR/$path"
+            EXCLUDES+=("/$path")
+        else
+            echo "Configured documentation path does not exist: $path" >&2
+            exit 1
+        fi
+    done
 
-for path in "${DOC_PATHS[@]}"; do
-    if [ -e "$RELEASE_DIR/$path" ]; then
-        # In the submitted package README, links to repository files should
-        # point to the local copies above. Files in `exclude` remain available
-        # on Universe.
-        DOC_PATH="$path" perl -0pi -e '
-            my $path = quotemeta($ENV{"DOC_PATH"});
-            s{https://github\.com/alexanderkoller/typst-citegeist/(?:blob|tree)/main/($path(?:[/?#][^)\s]*)?)}{$1}g;
-            s{https://raw\.githubusercontent\.com/alexanderkoller/typst-citegeist/(?:refs/heads/)?main/($path(?:[/?#][^)\s]*)?)}{$1}g;
-        ' "$RELEASE_DIR/README.md"
-    fi
-done
+    for path in "${DOC_PATHS[@]}"; do
+        if [ -e "$RELEASE_DIR/$path" ]; then
+            # In the submitted package README, links to repository files should
+            # point to the local copies above. Files in `exclude` remain available
+            # on Universe.
+            DOC_PATH="$path" perl -0pi -e '
+                my $path = quotemeta($ENV{"DOC_PATH"});
+                s{https://github\.com/alexanderkoller/typst-citegeist/(?:blob|tree)/main/($path(?:[/?#][^)\s]*)?)}{$1}g;
+                s{https://raw\.githubusercontent\.com/alexanderkoller/typst-citegeist/(?:refs/heads/)?main/($path(?:[/?#][^)\s]*)?)}{$1}g;
+            ' "$RELEASE_DIR/README.md"
+        fi
+    done
+fi
 
 if grep -Eq 'https://github\.com/alexanderkoller/typst-citegeist/(blob|tree)/main/|https://raw\.githubusercontent\.com/alexanderkoller/typst-citegeist/(refs/heads/)?main/' "$RELEASE_DIR/README.md"; then
     echo "README.md still contains links to the main branch of this repository." >&2

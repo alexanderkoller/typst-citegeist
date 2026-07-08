@@ -136,8 +136,6 @@ cargo test --manifest-path plugin/citegeist/plugin/Cargo.toml
 
 ## Changelog
 
-## Unreleased
-
 ## 0.3.0
 
 - Much more informative error reporting.
