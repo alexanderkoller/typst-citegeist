@@ -127,6 +127,18 @@ Until Typst finds a way to support JIT-compiled WASM, this is a performance pena
 
 ## Compilation
 
+To build the WASM plugin:
+
+```
+cargo build-wasm
+```
+
+This builds the Rust plugin for `wasm32-unknown-unknown` and then runs
+Binaryen's `wasm-opt -Oz` on the result. If `wasm-opt` is not on `PATH`, the
+command downloads a prebuilt Binaryen release into `.tools/`. Set
+`CITEGEIST_WASM_OPT=/path/to/wasm-opt` to use a specific binary, or set
+`CITEGEIST_NO_BINARYEN_DOWNLOAD=1` to require a locally installed `wasm-opt`.
+
 To run the tests:
 
 ```
@@ -135,6 +147,10 @@ cargo test --manifest-path plugin/citegeist/plugin/Cargo.toml
 
 
 ## Changelog
+
+## 0.3.1
+
+- Improved Bibtex parsing speed by 3x; thanks to @SchrodingerBlume for reminding me of Rust compile-time optimizations.
 
 ## 0.3.0
 

@@ -124,9 +124,7 @@ fi
 
 # Check that WASM is up to date.
 
-pushd "$PLUGIN_DIR"
-cargo build --target wasm32-unknown-unknown --release
-popd
+cargo build-wasm
 
 
 # Put together release

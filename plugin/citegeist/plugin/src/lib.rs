@@ -1,7 +1,6 @@
 use biblatex::*;
 use core::str;
 use indexmap::IndexMap;
-use std::collections::HashMap;
 #[cfg(target_arch = "wasm32")]
 use wasm_minimal_protocol::*;
 
@@ -9,7 +8,6 @@ use wasm_minimal_protocol::*;
 initiate_protocol!();
 
 use serde_cbor::to_vec;
-use serde_cbor::value::Value;
 use serde_derive::{Deserialize, Serialize};
 
 mod diagnostics;
@@ -39,7 +37,23 @@ struct MyEntry {
     entry_key: String,
     position: usize,
     fields: IndexMap<String, String>,
-    parsed_names: IndexMap<String, Vec<HashMap<String, Value>>>,
+    parsed_names: IndexMap<String, Vec<MyPerson>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct MyPerson {
+    family: String,
+    given: String,
+    prefix: String,
+    suffix: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    #[serde(rename = "prefix-initials", skip_serializing_if = "Option::is_none")]
+    prefix_initials: Option<String>,
+    #[serde(rename = "given-initials", skip_serializing_if = "Option::is_none")]
+    given_initials: Option<String>,
+    #[serde(rename = "use-prefix", skip_serializing_if = "Option::is_none")]
+    use_prefix: Option<bool>,
 }
 
 /// Main entry point for the plugin.
@@ -148,8 +162,7 @@ fn convert_entry(
     for (key, chunks) in &entry.fields {
         if NAME_FIELDS.contains(&key.as_str()) {
             if let Ok(names) = <Vec<Person> as Type>::from_chunks(chunks) {
-                let parsed: Vec<HashMap<String, Value>> =
-                    names.into_iter().map(person_to_map).collect();
+                let parsed: Vec<MyPerson> = names.into_iter().map(person_to_map).collect();
                 ret.parsed_names.insert(key.clone(), parsed);
             }
             if keep_raw_names {
@@ -181,30 +194,15 @@ fn convert_entry(
     ret
 }
 
-fn text(value: String) -> Value {
-    Value::Text(value)
-}
-
-fn person_to_map(p: Person) -> HashMap<String, Value> {
-    let mut name = HashMap::from([
-        ("family".into(), text(p.name)),
-        ("given".into(), text(p.given_name)),
-        ("prefix".into(), text(p.prefix)),
-        ("suffix".into(), text(p.suffix)),
-    ]);
-
-    if let Some(id) = p.id {
-        name.insert("id".into(), text(id));
+fn person_to_map(p: Person) -> MyPerson {
+    MyPerson {
+        family: p.name,
+        given: p.given_name,
+        prefix: p.prefix,
+        suffix: p.suffix,
+        id: p.id,
+        prefix_initials: p.prefix_initials,
+        given_initials: p.given_initials,
+        use_prefix: p.use_prefix,
     }
-    if let Some(prefix_initials) = p.prefix_initials {
-        name.insert("prefix-initials".into(), text(prefix_initials));
-    }
-    if let Some(given_initials) = p.given_initials {
-        name.insert("given-initials".into(), text(given_initials));
-    }
-    if let Some(use_prefix) = p.use_prefix {
-        name.insert("use-prefix".into(), Value::Bool(use_prefix));
-    }
-
-    name
 }

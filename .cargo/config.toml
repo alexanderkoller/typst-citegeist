@@ -1,0 +1,2 @@
+[alias]
+build-wasm = "run --manifest-path xtask/Cargo.toml -- build-wasm"
