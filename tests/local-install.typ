@@ -1,4 +1,4 @@
-#import "@local/citegeist:0.3.0": load-bibliography
+#import "@local/citegeist:0.3.1": load-bibliography
 
 #let bibtex = "
 @article{first,
@@ -50,4 +50,4 @@
 #assert.eq(second-author.at("prefix-initials"), "d")
 #assert.eq(second-author.id, "rousse-jps")
 
-Local Citegeist 0.3.0 smoke test passed.
+Local Citegeist test passed.
