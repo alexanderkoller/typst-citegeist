@@ -16,6 +16,44 @@ struct MyEntryWithValueNames {
     parsed_names: HashMap<String, Vec<HashMap<String, Value>>>,
 }
 
+#[derive(Debug, Deserialize)]
+struct MyEntryWithDates {
+    parsed_dates: HashMap<String, ParsedDate>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ParsedDate {
+    kind: String,
+    uncertain: bool,
+    approximate: bool,
+    start: Option<ParsedDatetime>,
+    end: Option<ParsedDatetime>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ParsedDatetime {
+    year: i32,
+    month: Option<u8>,
+    day: Option<u8>,
+    time: Option<ParsedTime>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ParsedTime {
+    hour: u8,
+    minute: u8,
+    second: u8,
+    offset: Option<ParsedTimeOffset>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ParsedTimeOffset {
+    kind: String,
+    positive: Option<bool>,
+    hours: Option<u8>,
+    minutes: Option<u8>,
+}
+
 /// Helper: call get_bib_map with defaults (keep_raw_names=true, sentence_case_titles=true).
 fn parse_bib(bib: &str) -> HashMap<String, MyEntry> {
     let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[], &[]).unwrap();
@@ -35,6 +73,11 @@ fn parse_bib_verbatim_titles(bib: &str) -> HashMap<String, MyEntry> {
 }
 
 fn parse_bib_value_names(bib: &str) -> HashMap<String, MyEntryWithValueNames> {
+    let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[], &[]).unwrap();
+    serde_cbor::from_slice(&result_bytes).unwrap()
+}
+
+fn parse_bib_dates(bib: &str) -> HashMap<String, MyEntryWithDates> {
     let result_bytes = citegeist::get_bib_map(bib.as_bytes(), &[1], &[1], &[], &[]).unwrap();
     serde_cbor::from_slice(&result_bytes).unwrap()
 }
@@ -83,6 +126,159 @@ fn test_parse_simple_bib() {
 
     // With keep_raw_names, the raw author string is also in fields
     assert!(entry.fields.contains_key("author"));
+}
+
+#[test]
+fn test_parsed_dates_are_exposed() {
+    let bib = r#"
+@misc{date-shapes,
+    title = "Date Shapes",
+    date = {2024-03-14},
+    eventdate = {2024-03-14/2024-03-20},
+    urldate = {2024/..},
+    origdate = {../-0031-07%},
+}
+"#;
+    let result = parse_bib_dates(bib);
+    let entry = result.get("date-shapes").unwrap();
+
+    let date = entry.parsed_dates.get("date").unwrap();
+    assert_eq!(date.kind, "at");
+    assert!(!date.uncertain);
+    assert!(!date.approximate);
+    let start = date.start.as_ref().unwrap();
+    assert_eq!(start.year, 2024);
+    assert_eq!(start.month, Some(3));
+    assert_eq!(start.day, Some(14));
+    assert!(date.end.is_none());
+
+    let eventdate = entry.parsed_dates.get("eventdate").unwrap();
+    assert_eq!(eventdate.kind, "between");
+    assert_eq!(eventdate.start.as_ref().unwrap().day, Some(14));
+    assert_eq!(eventdate.end.as_ref().unwrap().day, Some(20));
+
+    let urldate = entry.parsed_dates.get("urldate").unwrap();
+    assert_eq!(urldate.kind, "after");
+    assert_eq!(urldate.start.as_ref().unwrap().year, 2024);
+    assert!(urldate.end.is_none());
+
+    let origdate = entry.parsed_dates.get("origdate").unwrap();
+    assert_eq!(origdate.kind, "before");
+    assert!(origdate.uncertain);
+    assert!(origdate.approximate);
+    assert!(origdate.start.is_none());
+    let end = origdate.end.as_ref().unwrap();
+    assert_eq!(end.year, -31);
+    assert_eq!(end.month, Some(7));
+    assert_eq!(end.day, None);
+}
+
+#[test]
+fn test_incomplete_dates_are_valid() {
+    let bib = r#"
+@misc{year-only-date,
+    title = "Year Only",
+    date = {2024},
+}
+@misc{year-month-date,
+    title = "Year Month",
+    date = {2024-03},
+}
+"#;
+    let result = parse_bib_dates(bib);
+
+    let date = result
+        .get("year-only-date")
+        .unwrap()
+        .parsed_dates
+        .get("date")
+        .unwrap();
+    let start = date.start.as_ref().unwrap();
+    assert_eq!(start.year, 2024);
+    assert_eq!(start.month, None);
+    assert_eq!(start.day, None);
+
+    let date = result
+        .get("year-month-date")
+        .unwrap()
+        .parsed_dates
+        .get("date")
+        .unwrap();
+    let start = date.start.as_ref().unwrap();
+    assert_eq!(start.year, 2024);
+    assert_eq!(start.month, Some(3));
+    assert_eq!(start.day, None);
+}
+
+#[test]
+fn test_parsed_dates_include_year_month_day_fallback() {
+    let bib = r#"
+@misc{fallback,
+    title = "Fallback",
+    year = {-0004},
+    month = aug,
+    day = {28},
+}
+"#;
+    let result = parse_bib_dates(bib);
+    let date = result
+        .get("fallback")
+        .unwrap()
+        .parsed_dates
+        .get("date")
+        .unwrap();
+    let start = date.start.as_ref().unwrap();
+
+    assert_eq!(date.kind, "at");
+    assert_eq!(start.year, -4);
+    assert_eq!(start.month, Some(8));
+    assert_eq!(start.day, Some(28));
+}
+
+#[test]
+fn test_parsed_dates_include_time_and_offset() {
+    let bib = r#"
+@misc{with-time,
+    title = "With Time",
+    date = {2024-03-14T12:30:45+02:15},
+}
+"#;
+    let result = parse_bib_dates(bib);
+    let time = result
+        .get("with-time")
+        .unwrap()
+        .parsed_dates
+        .get("date")
+        .unwrap()
+        .start
+        .as_ref()
+        .unwrap()
+        .time
+        .as_ref()
+        .unwrap();
+
+    assert_eq!(time.hour, 12);
+    assert_eq!(time.minute, 30);
+    assert_eq!(time.second, 45);
+    let offset = time.offset.as_ref().unwrap();
+    assert_eq!(offset.kind, "offset");
+    assert_eq!(offset.positive, Some(true));
+    assert_eq!(offset.hours, Some(2));
+    assert_eq!(offset.minutes, Some(15));
+}
+
+#[test]
+fn test_ill_formed_dates_are_errors() {
+    let bib = r#"
+@misc{bad-date,
+    title = "Bad Date",
+    date = {not-a-date},
+}
+"#;
+    let message = parse_bib_error(bib, &[], &[]);
+
+    assert!(message.contains("invalid date in entry `bad-date`"));
+    assert!(message.contains("field `date`"));
 }
 
 #[test]

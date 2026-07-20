@@ -38,6 +38,7 @@ struct MyEntry {
     position: usize,
     fields: IndexMap<String, String>,
     parsed_names: IndexMap<String, Vec<MyPerson>>,
+    parsed_dates: IndexMap<String, MyDate>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -54,6 +55,48 @@ struct MyPerson {
     given_initials: Option<String>,
     #[serde(rename = "use-prefix", skip_serializing_if = "Option::is_none")]
     use_prefix: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct MyDate {
+    kind: String,
+    uncertain: bool,
+    approximate: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    start: Option<MyDatetime>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    end: Option<MyDatetime>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct MyDatetime {
+    year: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    month: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    day: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    time: Option<MyTime>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct MyTime {
+    hour: u8,
+    minute: u8,
+    second: u8,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    offset: Option<MyTimeOffset>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct MyTimeOffset {
+    kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    positive: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hours: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    minutes: Option<u8>,
 }
 
 /// Main entry point for the plugin.
@@ -138,7 +181,7 @@ pub fn get_bib_map(
     for (position, entry) in bibliography.iter().enumerate() {
         ret.insert(
             entry.key.clone(),
-            convert_entry(entry, position, keep_raw_names, sentence_case_titles),
+            convert_entry(entry, position, keep_raw_names, sentence_case_titles)?,
         );
     }
 
@@ -150,13 +193,14 @@ fn convert_entry(
     position: usize,
     keep_raw_names: bool,
     sentence_case_titles: bool,
-) -> MyEntry {
+) -> Result<MyEntry, String> {
     let mut ret = MyEntry {
         entry_type: entry.entry_type.to_string(),
         entry_key: entry.key.clone(),
         position,
         fields: IndexMap::with_capacity(entry.fields.len()),
         parsed_names: IndexMap::new(),
+        parsed_dates: IndexMap::new(),
     };
 
     for (key, chunks) in &entry.fields {
@@ -179,6 +223,9 @@ fn convert_entry(
         }
     }
 
+    insert_date_fields(&mut ret.parsed_dates, entry)
+        .map_err(|e| format!("invalid date in entry `{}`: {e}", entry.key))?;
+
     // Fall back to the accessor if title wasn't a direct field
     // (entry.title() resolves aliases like maintitle).
     if !ret.fields.contains_key("title") {
@@ -191,7 +238,94 @@ fn convert_entry(
         }
     }
 
-    ret
+    Ok(ret)
+}
+
+fn insert_date_fields(
+    parsed_dates: &mut IndexMap<String, MyDate>,
+    entry: &Entry,
+) -> Result<(), String> {
+    maybe_insert_date(parsed_dates, "date", entry.date())?;
+    maybe_insert_date(parsed_dates, "eventdate", entry.event_date())?;
+    maybe_insert_date(parsed_dates, "urldate", entry.url_date())?;
+    maybe_insert_date(parsed_dates, "origdate", entry.orig_date())?;
+    Ok(())
+}
+
+fn maybe_insert_date(
+    parsed_dates: &mut IndexMap<String, MyDate>,
+    key: &str,
+    date: Result<PermissiveType<Date>, RetrievalError>,
+) -> Result<(), String> {
+    match date {
+        Ok(PermissiveType::Typed(date)) => {
+            parsed_dates.insert(key.into(), date_to_map(date));
+            Ok(())
+        }
+        Ok(PermissiveType::Chunks(_)) => Err(format!("field `{key}` is not a valid date")),
+        Err(RetrievalError::Missing(_)) => Ok(()),
+        Err(err) => Err(format!("field `{key}` is not a valid date: {err}")),
+    }
+}
+
+fn date_to_map(date: Date) -> MyDate {
+    let (kind, start, end) = match date.value {
+        DateValue::At(start) => ("at", Some(datetime_to_map(start)), None),
+        DateValue::After(start) => ("after", Some(datetime_to_map(start)), None),
+        DateValue::Before(end) => ("before", None, Some(datetime_to_map(end))),
+        DateValue::Between(start, end) => (
+            "between",
+            Some(datetime_to_map(start)),
+            Some(datetime_to_map(end)),
+        ),
+    };
+
+    MyDate {
+        kind: kind.into(),
+        uncertain: date.uncertain,
+        approximate: date.approximate,
+        start,
+        end,
+    }
+}
+
+fn datetime_to_map(datetime: Datetime) -> MyDatetime {
+    MyDatetime {
+        year: datetime.year,
+        month: datetime.month.map(|month| month + 1),
+        day: datetime.day.map(|day| day + 1),
+        time: datetime.time.map(time_to_map),
+    }
+}
+
+fn time_to_map(time: Time) -> MyTime {
+    MyTime {
+        hour: time.hour,
+        minute: time.minute,
+        second: time.second,
+        offset: time.offset.map(time_offset_to_map),
+    }
+}
+
+fn time_offset_to_map(offset: TimeOffset) -> MyTimeOffset {
+    match offset {
+        TimeOffset::Utc => MyTimeOffset {
+            kind: "utc".into(),
+            positive: None,
+            hours: None,
+            minutes: None,
+        },
+        TimeOffset::Offset {
+            positive,
+            hours,
+            minutes,
+        } => MyTimeOffset {
+            kind: "offset".into(),
+            positive: Some(positive),
+            hours: Some(hours),
+            minutes: Some(minutes),
+        },
+    }
 }
 
 fn person_to_map(p: Person) -> MyPerson {

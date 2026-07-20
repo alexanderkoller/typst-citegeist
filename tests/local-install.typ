@@ -1,4 +1,4 @@
-#import "@local/citegeist:0.3.1": load-bibliography
+#import "@local/citegeist:0.4.0": load-bibliography
 
 #let bibtex = "
 @article{first,

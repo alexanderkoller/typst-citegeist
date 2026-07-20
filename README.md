@@ -1,6 +1,6 @@
-# Citegeist: Direct bibtex access for Typst
+# Citegeist: Direct BibTeX access for Typst
 
-This package reads a Bibtex file and returns its contents as as a [Typst dictionary](https://typst.app/docs/reference/foundations/dictionary/). It does not attempt to typeset a bibliography and is not interested in CSL styles; all it does is return the raw Bibtex entries. It leaves all further processing to your Typst code.
+This package reads a BibTeX file and returns its contents as as a [Typst dictionary](https://typst.app/docs/reference/foundations/dictionary/). It does not attempt to typeset a bibliography and is not interested in CSL styles; all it does is return parsed Bibtex entries. It leaves all further processing to your Typst code.
 
 Citegeist is a thin wrapper around the [Typst biblatex crate](https://github.com/typst/biblatex), which reads a bibtex file into a Rust data structure. Citegeist simply makes this data structure available to Typst code.
 
@@ -10,7 +10,7 @@ Citegeist is a thin wrapper around the [Typst biblatex crate](https://github.com
 Use the `load-bibliography` command to parse a bibtex string into a Typst dictionary:
 
 ```
-#import "@preview/citegeist:0.3.1": load-bibliography
+#import "@preview/citegeist:0.4.0": load-bibliography
 
 #let bibtex_string = read("custom.bib")
 #let bib = load-bibliography(bibtex_string, source: "custom.bib")
@@ -57,6 +57,14 @@ This will print the bibtex entry for the key `bender-koller-2020-climbing`:
 		editor: (
 			(family: "Jurafsky", given: "Dan", prefix: "", suffix: ""),
 			(family: "Chai", given: "Joyce", prefix: "", suffix:"")
+		)
+	),
+	parsed_dates: (
+		date: (
+			kind: "at",
+			uncertain: false,
+			approximate: false,
+			start: (year: 2020, month: 7)
 		)
 	)
 )
@@ -106,11 +114,90 @@ Citegeist preserves the following BibLaTeX name options when they are present:
 Undefined name options are omitted from the name dictionary instead of being represented as `none`.
 
 
+## Parsed dates
+
+The `parsed_dates` entry contains all BibLaTeX date fields parsed by the Typst biblatex crate. This is the canonical way to consume date information from Citegeist. It currently contains `date`, `eventdate`, `urldate`, and `origdate` when these dates are defined.
+
+Every parsed date dictionary contains these fields:
+
+- `kind`: one of `"at"`, `"after"`, `"before"`, or `"between"`.
+- `uncertain`: whether the date has BibLaTeX's uncertain marker.
+- `approximate`: whether the date has BibLaTeX's approximate marker.
+- `start`: the start datetime for `at`, `after`, and `between` dates.
+- `end`: the end datetime for `before` and `between` dates.
+
+Datetime dictionaries contain `year` and may contain `month`, `day`, and `time`. Months and days are represented as one-based numbers. Year-only and year-month dates are valid and simply omit the missing fields. Ill-formed dates abort parsing with an error.
+
+The `kind`, `start`, and `end` fields represent BibLaTeX date ranges and open ranges:
+
+```
+date = {2024-03-14}
+// (kind: "at", start: (year: 2024, month: 3, day: 14))
+
+date = {2024-03-14/2024-03-20}
+// (kind: "between",
+//  start: (year: 2024, month: 3, day: 14),
+//  end: (year: 2024, month: 3, day: 20))
+
+date = {2024/..}
+// (kind: "after", start: (year: 2024))
+
+date = {../2024-03}
+// (kind: "before", end: (year: 2024, month: 3))
+```
+
+Uncertain and approximate markers are represented as booleans on the date dictionary, not as decorations on the year or datetime. For example:
+
+```
+date = {2024~}
+// (
+//   kind: "at",
+//   uncertain: false,
+//   approximate: true,
+//   start: (year: 2024),
+// )
+
+origdate = {-0031-07%}
+// (
+//   kind: "at",
+//   uncertain: true,
+//   approximate: true,
+//   start: (year: -31, month: 7),
+// )
+```
+
+Years before the Common Era are represented directly as negative integers, following the Typst biblatex crate. Citegeist does not convert them to display-era labels such as "BCE"; downstream code should decide how to format them. The month and day fields remain ordinary one-based positive integers when they are present.
+
+Datetime dictionaries may also contain a `time` dictionary:
+
+```
+date = {2024-03-14T12:30:45+02:15}
+// (
+//   kind: "at",
+//   uncertain: false,
+//   approximate: false,
+//   start: (
+//     year: 2024,
+//     month: 3,
+//     day: 14,
+//     time: (
+//       hour: 12,
+//       minute: 30,
+//       second: 45,
+//       offset: (kind: "offset", positive: true, hours: 2, minutes: 15),
+//     ),
+//   ),
+// )
+```
+
+UTC offsets are represented as `(kind: "utc")`; numeric offsets use `(kind: "offset", positive: bool, hours: int, minutes: int)`.
+
+
 ## Details
 
 The function `load-bibliography` returns a dictionary with one element per bibliography entry in your Bibtex file. The key of the dictionary element is the Bibtex key (in the example, `bender-koller-2020-climbing`); the value is a data structure representing a Bibtex entry.
 
-A Bibtex entry is represented as another dictionary, see the example above. It has five keys: `entry_type` is the Bibtex entry type (e.g. `inproceedings` or `article`); `entry_key` is the key of the Bibtex entry; `position` is the zero-based position of the entry in the bibliography; `parsed_names` contains parsed author/editor/translator names (see below); and `fields` contains all the fields of the Bibtex entry.
+A Bibtex entry is represented as another dictionary, see the example above. It has six keys: `entry_type` is the Bibtex entry type (e.g. `inproceedings` or `article`); `entry_key` is the key of the Bibtex entry; `position` is the zero-based position of the entry in the bibliography; `parsed_names` contains parsed author/editor/translator names; `parsed_dates` contains parsed date information; and `fields` contains the Bibtex fields of the entry.
 
 If duplicate entries are filtered with `on-duplicate`, `position` is counted after deduplication, so the returned entries are numbered from 0 without gaps.
 
@@ -147,6 +234,11 @@ cargo test --manifest-path plugin/citegeist/plugin/Cargo.toml
 
 
 ## Changelog
+
+## 0.4.0
+
+- Added canonical `parsed_dates` output for `date`, `eventdate`, `urldate`, and `origdate`, exposing BibLaTeX date kinds, ranges, uncertainty, approximation, incomplete dates, negative years, times, and timezone offsets.
+- Ill-formed dates now abort parsing with an error.
 
 ## 0.3.1
 
